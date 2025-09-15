@@ -44,5 +44,7 @@ typedef enum {
 
 // Declaration of get_token
 int get_token(void);
+int getLineNumber(void);
+
 
 #endif  /* __SCANNER_H__ */

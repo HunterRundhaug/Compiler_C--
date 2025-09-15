@@ -7,17 +7,19 @@
 /*
     Author: Hunter Rundhaug
     CSC-473
-    9/6/20205
+    9/6/2025
 */
 
 void alphaNumericParse();
 int which_one();
 void skip_comments();
 void parse_int_constant();
+int getchar_();
 
 char* lexeme;  /* the string corresponding to the current token */
 int cur;
 int curIndex;
+int lineNumber = 1;
 
 int get_token(){
     // reset all variables // 
@@ -27,7 +29,7 @@ int get_token(){
 
     // Skip Whitespace //
     do{
-        cur = getchar();
+        cur = getchar_();
         if(cur == EOF){
             return EOF;
         }
@@ -45,7 +47,7 @@ int get_token(){
     }
 
     // Get first char for this token //
-    cur = getchar();
+    cur = getchar_();
     lexeme[curIndex++] = cur;
     if(cur == EOF){
         return EOF;
@@ -95,7 +97,7 @@ int get_token(){
 
     // opASSG, opEQ //
     else if(cur == '='){
-        cur = getchar();
+        cur = getchar_();
         if(cur == '='){
             lexeme[curIndex++] = cur;
             return opEQ;
@@ -123,7 +125,7 @@ int get_token(){
 
     // opDIV, comment //
     else if(cur == '/'){
-        cur = getchar();
+        cur = getchar_();
         if(cur == '*'){
             // skip comments...
             skip_comments();
@@ -137,7 +139,7 @@ int get_token(){
 
     // opNE, opNOT //
     else if(cur == '!'){
-        cur = getchar();
+        cur = getchar_();
         if(cur == '='){
             lexeme[curIndex++] = cur;
             return opNE;
@@ -150,7 +152,7 @@ int get_token(){
 
     // opGT, opGE //
     else if(cur == '>'){
-        cur = getchar();
+        cur = getchar_();
         if(cur == '='){
             lexeme[curIndex++] = cur;
             return opGE;
@@ -163,7 +165,7 @@ int get_token(){
 
     // opLT, opLE //
     else if(cur == '<'){
-        cur = getchar();
+        cur = getchar_();
         if(cur == '='){
             lexeme[curIndex++] = cur;
             return opLE;
@@ -176,7 +178,7 @@ int get_token(){
 
     // opAND //
     else if(cur == '&'){
-        cur = getchar();
+        cur = getchar_();
         if(cur == '&'){
             lexeme[curIndex++] = cur;
             return opAND;
@@ -189,7 +191,7 @@ int get_token(){
 
     // opOR //
     else if(cur == '|'){
-        cur = getchar();
+        cur = getchar_();
         if(cur == '|'){
             lexeme[curIndex++] = cur;
             return opOR;
@@ -206,9 +208,17 @@ int get_token(){
 
 }
 
+int getchar_(){
+    int c = getchar();
+    if(c == '\n'){
+        lineNumber++;
+    }
+    return c;
+}
+
 void parse_int_constant(){
     do{
-        cur = getchar();
+        cur = getchar_();
         if(cur == EOF){
             return;
         }
@@ -226,9 +236,9 @@ void parse_int_constant(){
 
 void skip_comments(){
 
-    while((cur = getchar()) != EOF){
+    while((cur = getchar_()) != EOF){
         if(cur == '*'){
-            if((cur = getchar()) == '/'){
+            if((cur = getchar_()) == '/'){
                 return;
             }
         }
@@ -260,7 +270,7 @@ int which_one(){
 void alphaNumericParse(){
 
     do{
-        cur = getchar();
+        cur = getchar_();
         if(cur == EOF){
             return;
         }
@@ -274,4 +284,8 @@ void alphaNumericParse(){
     while(isalnum(cur) || cur == '_');
 
     lexeme[curIndex] = '\0';
+}
+
+int getLineNumber(){
+    return lineNumber;
 }

@@ -1,9 +1,9 @@
 #!/bin/bash
 make clean 
 
-make scanner
+make compile
 
-./scanner < test.c > out.txt
+./compile < test.c > out.txt
 
 echo complete
 
