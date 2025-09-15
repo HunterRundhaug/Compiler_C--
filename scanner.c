@@ -212,7 +212,7 @@ void parse_int_constant(){
         if(cur == EOF){
             return;
         }
-        if(isspace(cur)){
+        if(isspace(cur) || !isdigit(cur)){
             ungetc(cur, stdin);
             break;
         }
@@ -264,14 +264,14 @@ void alphaNumericParse(){
         if(cur == EOF){
             return;
         }
-        if(isspace(cur)){
+        if(isspace(cur) || (!isalnum(cur) && cur != '_')){
             ungetc(cur, stdin);
             break;
         }
         lexeme[curIndex++] = cur;
 
     }
-    while(isalnum(cur));
+    while(isalnum(cur) || cur == '_');
 
-    lexeme[curIndex++] = '\0';
+    lexeme[curIndex] = '\0';
 }

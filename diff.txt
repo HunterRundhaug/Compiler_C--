@@ -1,0 +1,61 @@
+ID : float						      |	ID : float								
+ID : ngon_area						      |	ID : ngon_area								
+LPAREN : (						      |	LPAREN : (								
+kwINT : int						      |	kwINT : int								
+ID : n							      |	ID : n								
+COMMA : ,						      |	COMMA : ,								
+ID : float						      |	ID : float								
+ID : s							      |	ID : s								
+RPAREN : )						      |	RPAREN : )								
+LBRACE : {						      |	LBRACE : {								
+ID : float						      |	ID : float								
+ID : r							      |	ID : r								
+COMMA : ,						      |	COMMA : ,								
+ID : A							      |	ID : A								
+SEMI : ;						      |	SEMI : ;								
+kwIF : if						      |	kwIF : if								
+LPAREN : (						      |	LPAREN : (								
+ID : n							      |	ID : n								
+opGE : >=						      |	opGE : >=								
+INTCON : 3						      |	INTCON : 3								
+opAND : &&						      |	opAND : &&								
+ID : s							      |	ID : s								
+opGT : >						      |	opGT : >								
+INTCON : 0						      |	INTCON : 0								
+RPAREN : )						      |	RPAREN : )								
+LBRACE : {						      |	LBRACE : {								
+ID : r							      |	ID : r								
+opASSG : =						      |	opASSG : =								
+ID : s							      |	ID : s								
+opMUL : *						      |	opMUL : *								
+ID : tan						      |	ID : tan								
+LPAREN : (						      |	LPAREN : (								
+ID : M_PI_2						      |	ID : M_PI_2								
+opSUB : -						      |	opSUB : -								
+ID : M_PI						      |	ID : M_PI								
+opDIV : /						      |	opDIV : /								
+ID : n							      |	ID : n								
+RPAREN : )						      |	RPAREN : )								
+opDIV : /						      |	opDIV : /								
+INTCON : 2						      |	INTCON : 2								
+SEMI : ;						      |	SEMI : ;								
+ID : A							      |	ID : A								
+opASSG : =						      |	opASSG : =								
+ID : n							      |	ID : n								
+opMUL : *						      |	opMUL : *								
+ID : r							      |	ID : r								
+opMUL : *						      |	opMUL : *								
+ID : r							      |	ID : r								
+opMUL : *						      |	opMUL : *								
+ID : tan						      |	ID : tan								
+LPAREN : (						      |	LPAREN : (								
+ID : M_PI						      |	ID : M_PI								
+opDIV : /						      |	opDIV : /								
+ID : n							      |	ID : n								
+RPAREN : )						      |	RPAREN : )								
+SEMI : ;						      |	SEMI : ;								
+kwRETURN : return					      |	kwRETURN : return								
+ID : A							      |	ID : A								
+SEMI : ;						      |	SEMI : ;								
+RBRACE : }						      |	RBRACE : }								
+RBRACE : }						      /	RBRACE : }
