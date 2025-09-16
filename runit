@@ -3,7 +3,8 @@ make clean
 
 make compile
 
-./compile < test.c > out.txt
+./compile < test.c 
 
-echo complete
+echo complete with exit status of $(echo $?)
+
 

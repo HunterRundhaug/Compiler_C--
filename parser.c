@@ -17,20 +17,49 @@ void stmt();
 void fn_call();
 void opt_expr_list();
 void match(int tok);
-void printStandardError();
+void printStandardError(int,int);
 // ----------- //
 
 int curTok;
 
-void prog(){
-    while(curTok == kwINT){
+char* token_name[] = {
+  "UNDEF",
+  "ID",
+  "INTCON",
+  "LPAREN",
+  "RPAREN",
+  "LBRACE",
+  "RBRACE",
+  "COMMA",
+  "SEMI",
+  "kwINT",
+  "kwIF",
+  "kwELSE",
+  "kwWHILE",
+  "kwRETURN",
+  "opASSG",
+  "opADD",
+  "opSUB",
+  "opMUL",
+  "opDIV",
+  "opEQ",
+  "opNE",
+  "opGT",
+  "opGE",
+  "opLT",
+  "opLE",
+  "opAND",
+  "opOR",
+  "opNOT",
+  "EOF"
+};
+
+void prog() {
+    if (curTok == kwINT) {
         func_defn();
+        prog();
     }
-    if(curTok == -1){
-        return;
-    }
-    printStandardError();
-    exit(1);
+    // else epsilon (do nothing)
 }
 
 void type(){
@@ -57,10 +86,12 @@ void opt_var_decls(){
     // empty
 }
 
-void opt_stmt_list(){
-    while(curTok == ID || curTok == LPAREN || curTok == RPAREN){
+void opt_stmt_list() {
+    if (curTok == ID) {
         stmt();
+        opt_stmt_list();
     }
+    // else epsilon (do nothing)
 }
 
 void stmt(){
@@ -69,27 +100,29 @@ void stmt(){
 }
 
 void fn_call(){
-    if( curTok != ID && curTok != LPAREN && curTok != RPAREN){
-        printStandardError();
-        exit(1);
-    }
+    match(ID);
+    match(LPAREN);
+    opt_expr_list();
+    match(RPAREN);
 }
+
 
 void opt_expr_list(){
     // empty
 }
 
 void match(int tok){
+    //printf("Matched token: %s\n", token_name[curTok]);
     if (curTok == tok) {
         curTok = get_token(); // advance to next token
     } else {
-        printStandardError();
+        printStandardError(tok, curTok);
         exit(1);
     }
 }
 
-void printStandardError(){
-    fprintf(stderr, "ERROR LINE %d, exit status = 1\n", getLineNumber());
+void printStandardError(int expected, int actual){
+    fprintf(stderr, "ERROR LINE %d, exit status = 1, Expected {%s} But Got {%s}\n", getLineNumber(), token_name[expected], token_name[actual]);
 }
 
 // Main parse function

@@ -1,0 +1,15 @@
+Matched token: kwINT
+Matched token: ID
+Matched token: LPAREN
+Matched token: RPAREN
+Matched token: LBRACE
+Matched token: ID
+Matched token: LPAREN
+Matched token: RPAREN
+Matched token: SEMI
+Matched token: ID
+Matched token: LPAREN
+Matched token: RPAREN
+Matched token: SEMI
+Matched token: RBRACE
+Matched token: (null)
