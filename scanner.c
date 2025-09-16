@@ -19,7 +19,7 @@ int getchar_();
 char* lexeme;  /* the string corresponding to the current token */
 int cur;
 int curIndex;
-int lineNumber = 1;
+int lineNumber = 0;
 
 int get_token(){
     // reset all variables // 

@@ -1,5 +1,4 @@
-int
-    f
-      (
-        )
-	  { 
+int hello(){
+    foo();
+    
+}
