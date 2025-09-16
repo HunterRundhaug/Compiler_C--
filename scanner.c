@@ -15,6 +15,7 @@ int which_one();
 void skip_comments();
 void parse_int_constant();
 int getchar_();
+int ungetchar_(int, FILE*);
 
 char* lexeme;  /* the string corresponding to the current token */
 int cur;
@@ -34,7 +35,7 @@ int get_token(){
             return EOF;
         }
         else if(!isspace(cur)){ // put cur back if it was not whitespace
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
         }
     }
     while(isspace(cur));
@@ -103,7 +104,7 @@ int get_token(){
             return opEQ;
         }
         else{
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
             return opASSG;
         }
     }
@@ -132,7 +133,7 @@ int get_token(){
             return get_token();
         }
         else{
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
             return opDIV;
         }
     }
@@ -145,7 +146,7 @@ int get_token(){
             return opNE;
         }
         else{
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
             return opNOT; 
         }
     }
@@ -158,7 +159,7 @@ int get_token(){
             return opGE;
         }
         else{
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
             return opGT;
         }
     }
@@ -171,7 +172,7 @@ int get_token(){
             return opLE;
         }
         else{
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
             return opLT;
         }
     }
@@ -184,7 +185,7 @@ int get_token(){
             return opAND;
         }
         else{
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
             return UNDEF;
         }
     }
@@ -197,7 +198,7 @@ int get_token(){
             return opOR;
         }
         else{
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
             return UNDEF;
         }
     }
@@ -216,6 +217,13 @@ int getchar_(){
     return c;
 }
 
+int ungetchar_(int c, FILE *stream) {
+    if (c == '\n') {
+        lineNumber--;
+    }
+    return ungetc(c, stream);
+}
+
 void parse_int_constant(){
     do{
         cur = getchar_();
@@ -223,7 +231,7 @@ void parse_int_constant(){
             return;
         }
         if(isspace(cur) || !isdigit(cur)){
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
             break;
         }
         lexeme[curIndex++] = cur;
@@ -275,7 +283,7 @@ void alphaNumericParse(){
             return;
         }
         if(isspace(cur) || (!isalnum(cur) && cur != '_')){
-            ungetc(cur, stdin);
+            ungetchar_(cur, stdin);
             break;
         }
         lexeme[curIndex++] = cur;
