@@ -27,6 +27,10 @@ int curTok;
 int nextTok;
 int thirdTok;
 
+int curLine;
+int nextTokLine;
+int thirdTokLine;
+
 char* token_name[] = {
   "UNDEF",
   "ID",
@@ -159,8 +163,13 @@ void match(int tok){
     //printf("cur:%s, expected:%s\n", token_name[curTok], token_name[tok]);
     if (curTok == tok) {
         curTok = nextTok; // advance to next token
+        curLine = nextTokLine;
+
         nextTok = thirdTok;
+        nextTokLine = thirdTokLine;
+
         thirdTok = get_token();
+        thirdTokLine = getLineNumber();
     } else {
         printStandardError(tok, curTok);
         exit(1);
@@ -168,14 +177,23 @@ void match(int tok){
 }
 
 void printStandardError(int expected, int actual){
-    fprintf(stderr, "ERROR LINE %d, exit status = 1, Expected {%s} But Got {%s}\n", getLineNumber(), token_name[expected], token_name[actual]);
+    fprintf(stderr, "ERROR LINE %d, exit status = 1, Expected {%s} But Got {%s}\n", curLine, token_name[expected], token_name[actual]);
+}
+
+void increment_tokens(){
+    curTok = get_token();
+    curLine = getLineNumber();
+
+    nextTok = get_token();
+    nextTokLine = getLineNumber();
+    
+    thirdTok = get_token();
+    thirdTokLine = getLineNumber();
 }
 
 // Main parse function
 int parse(void) {
-    curTok = get_token();
-    nextTok = get_token();
-    thirdTok = get_token();
+    increment_tokens();
     prog();
     return 0;
 }
