@@ -8,9 +8,12 @@
 // Prototypes //
 int parse(void);
 void prog();
+void var_decl();
+void id_list();
 void type();
 void func_defn();
 void opt_formals();
+void formals();
 void opt_var_decls();
 void opt_stmt_list();
 void stmt();
@@ -21,6 +24,8 @@ void printStandardError(int,int);
 // ----------- //
 
 int curTok;
+int nextTok;
+int thirdTok;
 
 char* token_name[] = {
   "UNDEF",
@@ -55,8 +60,13 @@ char* token_name[] = {
 };
 
 void prog() {
-    if (curTok == kwINT) {
-        func_defn();
+    if (curTok == kwINT && nextTok == ID) {
+        if(thirdTok == LPAREN){
+            func_defn();
+        }
+        else{
+            var_decl();
+        }
         prog();
     }
     else if(curTok != EOF){
@@ -64,6 +74,20 @@ void prog() {
         exit(1);
     }
     // else epsilon (do nothing)
+}
+
+void var_decl(){
+    type();
+    id_list();
+    match(SEMI);
+}
+
+void id_list(){
+    match(ID);
+    if(curTok == COMMA){
+        match(COMMA);
+        id_list();
+    }
 }
 
 void type(){
@@ -83,11 +107,27 @@ void func_defn(){
 }
 
 void opt_formals(){
+    if(curTok == kwINT){
+        formals();
+    }
     // empty
 }
 
+void formals(){
+    type();
+    match(ID);
+    if(curTok == COMMA){
+        match(COMMA);
+        formals();
+    }
+}
+
 void opt_var_decls(){
-    // empty
+    if(curTok == kwINT){
+        var_decl();
+        opt_var_decls();
+    }
+    // or epsilon
 }
 
 void opt_stmt_list() {
@@ -116,9 +156,11 @@ void opt_expr_list(){
 }
 
 void match(int tok){
-    //printf("Matched token: %s\n", token_name[curTok]);
+    //printf("cur:%s, expected:%s\n", token_name[curTok], token_name[tok]);
     if (curTok == tok) {
-        curTok = get_token(); // advance to next token
+        curTok = nextTok; // advance to next token
+        nextTok = thirdTok;
+        thirdTok = get_token();
     } else {
         printStandardError(tok, curTok);
         exit(1);
@@ -132,6 +174,8 @@ void printStandardError(int expected, int actual){
 // Main parse function
 int parse(void) {
     curTok = get_token();
+    nextTok = get_token();
+    thirdTok = get_token();
     prog();
     return 0;
 }
