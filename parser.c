@@ -59,6 +59,10 @@ void prog() {
         func_defn();
         prog();
     }
+    else if(curTok != EOF){
+        printStandardError(9, curTok);
+        exit(1);
+    }
     // else epsilon (do nothing)
 }
 
