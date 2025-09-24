@@ -2,15 +2,15 @@
  * A sample G1 program
 */
 
-int bigfunc() {
-  int sickInt, y, z;
+int main() {
+  int velocity, gravity;
 }
 
-int p, q;
+int height, weight;
 
-int b(int u, int v) {
-  int x, y, z;
+int getFoo(int ammo, int amount) {
+  int num, num2, num3;
   
-  a( );
+  callFoo( );
 }
 

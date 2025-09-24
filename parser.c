@@ -94,7 +94,7 @@ void var_decl(){
 }
 
 void id_list(){
-    add_new_symbol(curLexeme, kwINT);
+    add_new_symbol(curLexeme, SYM_INT_VAR);
     match(ID);
     if(curTok == COMMA){
         match(COMMA);
@@ -108,9 +108,10 @@ void type(){
 }
 
 void func_defn(){
-    add_new_scope(); // Add new scope because we are in a new function
     type();
+    add_new_symbol(curLexeme, SYM_FUNC);
     match(ID);
+    add_new_scope(); // Add new scope because we are in a new function
     match(LPAREN);
     opt_formals();
     match(RPAREN);
@@ -130,6 +131,7 @@ void opt_formals(){
 
 void formals(){
     type();
+    add_new_symbol(curLexeme, SYM_INT_VAR);
     match(ID);
     if(curTok == COMMA){
         match(COMMA);

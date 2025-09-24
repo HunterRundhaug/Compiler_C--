@@ -10,6 +10,10 @@
  * Purpose: The symbol table code for the CSC 453 project. 
  */
 
+char* symbol_type_name[] = {
+    "SYM_INT_VAR",
+    "SYM_FUNC",
+};
 
 // Function Prototypes
 Scope* get_new_scope();             // Allocates and initializes a new Scope
@@ -45,7 +49,7 @@ Symbol* get_new_symbol();           // Allocates and initializes a new Symbol
     // not implemented...
  }
 
- void add_new_symbol(char* name, int type){
+ void add_new_symbol(char* name, SymbolType type){
     if(table_head == NULL){
         fprintf(stderr, "ERROR: trying to add symbol to an empty table\n");
         exit(1);
@@ -58,7 +62,7 @@ Symbol* get_new_symbol();           // Allocates and initializes a new Symbol
     new_symbol->name = strdup(name);
     new_symbol->type = type;
 
-    printf("cur lexeme: %s\n", name);
+    printf("Lexeme: <%s> Symbol Type: <%s>\n", name, symbol_type_name[type]);
  }
 
 /* ↓ ↓ ↓ ↓ Functions for mallocING new structs ↓ ↓ ↓ ↓ */
@@ -80,7 +84,7 @@ Symbol* get_new_symbol() {
         exit(1);
     }
     new_symbol->name = NULL;
-    new_symbol->type = 0;
+    new_symbol->type = -1;
     new_symbol->next = NULL;
     return new_symbol;
 }
