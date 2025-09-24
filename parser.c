@@ -24,6 +24,8 @@ void match(int tok);
 void printStandardError(int,int);
 // ----------- //
 
+extern int chk_decl_flag;
+
 int curTok;
 int nextTok;
 int thirdTok;
@@ -94,6 +96,10 @@ void var_decl(){
 }
 
 void id_list(){
+    if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){ // if 0, int variable was already declared.
+        fprintf(stderr, "ERROR LINE %d: INT variable %s was ALREADY defined in the current scope\n", curLine, curLexeme);
+        exit(1);
+    }
     add_new_symbol(curLexeme, SYM_INT_VAR);
     match(ID);
     if(curTok == COMMA){
@@ -109,6 +115,10 @@ void type(){
 
 void func_defn(){
     type();
+    if( chk_decl_flag == 1 && lookup_global_scope(curLexeme, SYM_FUNC) == 0){ // if 0, function was already declared.
+        fprintf(stderr, "ERROR LINE %d: Function %s was ALREADY defined in the global scope\n", curLine, curLexeme);
+        exit(1);
+    }
     add_new_symbol(curLexeme, SYM_FUNC);
     match(ID);
     add_new_scope(); // Add new scope because we are in a new function
@@ -131,6 +141,10 @@ void opt_formals(){
 
 void formals(){
     type();
+    if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){ // if 0, int variable was already declared.
+        fprintf(stderr, "ERROR LINE %d: INT variable %s was ALREADY defined in the current scope\n", curLine, curLexeme);
+        exit(1);
+    }
     add_new_symbol(curLexeme, SYM_INT_VAR);
     match(ID);
     if(curTok == COMMA){
@@ -161,6 +175,12 @@ void stmt(){
 }
 
 void fn_call(){
+    if(chk_decl_flag == 1){
+        if(lookup_global_scope(curLexeme, SYM_FUNC) == 1){ // if 1, function was never declared.
+            fprintf(stderr, "ERROR LINE %d: Function %s was never defined\n", curLine, curLexeme);
+            exit(1);
+        }
+    }
     match(ID);
     match(LPAREN);
     opt_expr_list();

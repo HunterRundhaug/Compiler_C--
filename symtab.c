@@ -19,13 +19,16 @@ char* symbol_type_name[] = {
 Scope* get_new_scope();             // Allocates and initializes a new Scope
 Symbol* get_new_symbol();           // Allocates and initializes a new Symbol
 
- Scope* table_head;
+Scope* table_head;
+
+Scope* global_scope; // this will be at the end of the list because we prepend new scopes.
 
 // Pushes a new scope onto the symbol table stack.
 // Used to enter a new block or function scope during parsing.
  void add_new_scope(){
     if(table_head == NULL){
         table_head = get_new_scope();
+        global_scope = table_head;
     }
     else{
         Scope* new_scope = get_new_scope();
@@ -62,7 +65,7 @@ Symbol* get_new_symbol();           // Allocates and initializes a new Symbol
     new_symbol->name = strdup(name);
     new_symbol->type = type;
 
-    printf("Lexeme: <%s> Symbol Type: <%s>\n", name, symbol_type_name[type]);
+    // printf("Lexeme: <%s> Symbol Type: <%s>\n", name, symbol_type_name[type]);
  }
 
 /* ↓ ↓ ↓ ↓ Functions for mallocING new structs ↓ ↓ ↓ ↓ */
@@ -90,5 +93,44 @@ Symbol* get_new_symbol() {
 }
 /* - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ -*/
 
+// Returns 0 if input symbol is in the global scope,
+// OR returns 1 if not.
+int lookup_global_scope(char* name, SymbolType type){
+    if(global_scope == NULL){
+        fprintf(stderr, "GLOBAL SCOPE VARIABLE IS NULL");
+        exit(1);
+    }
+    Symbol* cur_sym = global_scope->symbols;
+    if(cur_sym == NULL){
+        return 1;
+    }
+    while(cur_sym != NULL){
+        if(type == cur_sym->type && strcmp(name, cur_sym->name) == 0){
+            return 0;
+        }
+        cur_sym = cur_sym->next;
+    }
+    return 1;
+}
+
+// Returns 0 if input variable exists in current scope
+// Returns 1 if input does not exist in current scope
+int lookup_in_current_scope(char* name, SymbolType type){
+    if(table_head == NULL){
+        fprintf(stderr, "TABLE HEAD IS NULL");
+        exit(1);
+    }
+    Symbol* cur_sym = table_head->symbols;
+    if(cur_sym == NULL){
+        return 1;
+    }
+    while(cur_sym != NULL){
+        if(type == cur_sym->type && strcmp(name, cur_sym->name) == 0){
+            return 0;
+        }
+        cur_sym = cur_sym->next;
+    }
+    return 1;
+}
 
 

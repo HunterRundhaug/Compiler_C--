@@ -8,9 +8,12 @@ int main() {
 
 int height, weight;
 
+int height;
+
 int getFoo(int ammo, int amount) {
   int num, num2, num3;
   
-  callFoo( );
+  getFoo( );
 }
+
 

@@ -29,4 +29,8 @@ void add_new_symbol(char*, SymbolType);    // Pushes a new symbol to the symbol 
 void pop_current_scope();           // Pops current scope and frees contents
 void free_scope(Scope* scope);      // Frees all symbols in a given scope
 
+// Look-ups
+int lookup_global_scope(char* name, SymbolType type);
+int lookup_in_current_scope(char* name, SymbolType type);
+
 #endif
