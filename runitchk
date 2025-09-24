@@ -6,3 +6,4 @@ make compile
 ./compile --chk_decl < test.c 
 
 echo complete with exit status of $(echo $?)
+

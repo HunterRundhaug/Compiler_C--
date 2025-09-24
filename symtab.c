@@ -105,7 +105,7 @@ int lookup_global_scope(char* name, SymbolType type){
         return 1;
     }
     while(cur_sym != NULL){
-        if(type == cur_sym->type && strcmp(name, cur_sym->name) == 0){
+        if(strcmp(name, cur_sym->name) == 0){
             return 0;
         }
         cur_sym = cur_sym->next;
@@ -125,10 +125,19 @@ int lookup_in_current_scope(char* name, SymbolType type){
         return 1;
     }
     while(cur_sym != NULL){
-        if(type == cur_sym->type && strcmp(name, cur_sym->name) == 0){
+        if(strcmp(name, cur_sym->name) == 0){
             return 0;
         }
         cur_sym = cur_sym->next;
+    }
+    return 1;
+}
+
+// Returns 0 if the current scope is the global scope
+// Returns 1 if not in global scope.
+int in_global_scope(){
+    if(table_head == global_scope){
+        return 0;
     }
     return 1;
 }

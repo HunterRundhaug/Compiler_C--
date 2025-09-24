@@ -116,6 +116,7 @@ void type(){
 void func_defn(){
     type();
     if( chk_decl_flag == 1 && lookup_global_scope(curLexeme, SYM_FUNC) == 0){ // if 0, function was already declared.
+        printf("Triggere\n");
         fprintf(stderr, "ERROR LINE %d: Function %s was ALREADY defined in the global scope\n", curLine, curLexeme);
         exit(1);
     }
