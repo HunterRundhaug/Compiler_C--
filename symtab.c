@@ -113,6 +113,27 @@ int lookup_global_scope(char* name, SymbolType type){
     return 1;
 }
 
+// similar to lookup_global_scope() but checks for same type as well.
+// Returns 0 if input symbol is in the global scope,
+// OR returns 1 if not.
+int lookup_global_scope_with_same_type(char* name, SymbolType type){
+    if(global_scope == NULL){
+        fprintf(stderr, "GLOBAL SCOPE VARIABLE IS NULL");
+        exit(1);
+    }
+    Symbol* cur_sym = global_scope->symbols;
+    if(cur_sym == NULL){
+        return 1;
+    }
+    while(cur_sym != NULL){
+        if(type == cur_sym->type && strcmp(name, cur_sym->name) == 0){
+            return 0;
+        }
+        cur_sym = cur_sym->next;
+    }
+    return 1;
+}
+
 // Returns 0 if input variable exists in current scope
 // Returns 1 if input does not exist in current scope
 int lookup_in_current_scope(char* name, SymbolType type){

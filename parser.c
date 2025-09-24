@@ -96,7 +96,7 @@ void var_decl(){
 }
 
 void id_list(){
-    if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){ // if 0, int variable was already declared.
+    if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){ // if 0, variable with same name was already declared.
         fprintf(stderr, "ERROR LINE %d: INT variable %s was ALREADY defined in the current scope\n", curLine, curLexeme);
         exit(1);
     }
@@ -115,7 +115,7 @@ void type(){
 
 void func_defn(){
     type();
-    if( chk_decl_flag == 1 && lookup_global_scope(curLexeme, SYM_FUNC) == 0){ // if 0, function was already declared.
+    if( chk_decl_flag == 1 && lookup_global_scope(curLexeme, SYM_FUNC) == 0){ // if 0, function was already declared, or a variable with same name.
         printf("Triggere\n");
         fprintf(stderr, "ERROR LINE %d: Function %s was ALREADY defined in the global scope\n", curLine, curLexeme);
         exit(1);
@@ -177,7 +177,7 @@ void stmt(){
 
 void fn_call(){
     if(chk_decl_flag == 1){
-        if(lookup_global_scope(curLexeme, SYM_FUNC) == 1){ // if 1, function was never declared.
+        if(lookup_global_scope_with_same_type(curLexeme, SYM_FUNC) == 1){ // if 1, function was never declared.
             fprintf(stderr, "ERROR LINE %d: Function %s was never defined\n", curLine, curLexeme);
             exit(1);
         }

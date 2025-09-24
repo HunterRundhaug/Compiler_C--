@@ -1,5 +1,2 @@
-int x(){
-
-}
-
-int x;
+int a() { b(); }
+int b() { a(); }
