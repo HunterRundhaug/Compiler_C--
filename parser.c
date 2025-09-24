@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "parser.h"
+#include "symtab.h"
 
 // Prototypes //
 int parse(void);
@@ -30,6 +31,12 @@ int thirdTok;
 int curLine;
 int nextTokLine;
 int thirdTokLine;
+
+int lastTypeDeclared;  // used for id_list variable declaration of multiple variables.
+
+char* curLexeme;
+char* nextLexeme;
+char* thirdLexeme;
 
 char* token_name[] = {
   "UNDEF",
@@ -87,6 +94,7 @@ void var_decl(){
 }
 
 void id_list(){
+    add_new_symbol(curLexeme, kwINT);
     match(ID);
     if(curTok == COMMA){
         match(COMMA);
@@ -95,10 +103,12 @@ void id_list(){
 }
 
 void type(){
+    lastTypeDeclared = curTok;
     match(kwINT);
 }
 
 void func_defn(){
+    add_new_scope(); // Add new scope because we are in a new function
     type();
     match(ID);
     match(LPAREN);
@@ -108,6 +118,7 @@ void func_defn(){
     opt_var_decls();
     opt_stmt_list();
     match(RBRACE);
+    pop_current_scope(); // leave this functions scope
 }
 
 void opt_formals(){
@@ -164,12 +175,15 @@ void match(int tok){
     if (curTok == tok) {
         curTok = nextTok; // advance to next token
         curLine = nextTokLine;
+        curLexeme = nextLexeme;
 
         nextTok = thirdTok;
         nextTokLine = thirdTokLine;
+        nextLexeme = thirdLexeme;
 
         thirdTok = get_token();
         thirdTokLine = getLineNumber();
+        thirdLexeme = get_lexeme();
     } else {
         printStandardError(tok, curTok);
         exit(1);
@@ -183,16 +197,20 @@ void printStandardError(int expected, int actual){
 void increment_tokens(){
     curTok = get_token();
     curLine = getLineNumber();
+    curLexeme = get_lexeme();
 
     nextTok = get_token();
     nextTokLine = getLineNumber();
+    nextLexeme = get_lexeme();
     
     thirdTok = get_token();
     thirdTokLine = getLineNumber();
+    thirdLexeme = get_lexeme();
 }
 
 // Main parse function
 int parse(void) {
+    add_new_scope(); // Append Global scope to symbol table
     increment_tokens();
     prog();
     return 0;

@@ -297,3 +297,7 @@ void alphaNumericParse(){
 int getLineNumber(){
     return lineNumber;
 }
+
+char* get_lexeme(){
+    return strdup(lexeme);
+}
