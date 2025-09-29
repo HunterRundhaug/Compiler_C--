@@ -134,6 +134,35 @@ int lookup_global_scope_with_same_type(char* name, SymbolType type){
     return 1;
 }
 
+
+// 0 if found.
+// 1 if not found.
+// 2 if found but type is different.
+int lookup_local_to_global(char* name, SymbolType type){
+    if(global_scope == NULL){
+        fprintf(stderr, "GLOBAL SCOPE VARIABLE IS NULL");
+        exit(1);
+    }
+    Scope* cur_scope = table_head;
+    while(cur_scope != NULL){
+        Symbol* cur_sym = cur_scope->symbols;
+        if(cur_sym == NULL){
+            return 1;
+        }
+        while(cur_sym != NULL){
+            if(strcmp(name, cur_sym->name) == 0){
+                if(type != cur_sym->type){
+                    return 2;
+                }
+                return 0;
+            }
+            cur_sym = cur_sym->next;
+        }
+        cur_scope = cur_scope->next;
+    }
+    return 1; // Not found.
+}
+
 // Returns 0 if input variable exists in current scope
 // Returns 1 if input does not exist in current scope
 int lookup_in_current_scope(char* name, SymbolType type){

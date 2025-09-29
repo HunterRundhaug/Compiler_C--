@@ -34,5 +34,6 @@ int lookup_global_scope(char* name, SymbolType type);
 int lookup_global_scope_with_same_type(char* name, SymbolType type);
 int lookup_in_current_scope(char* name, SymbolType type);
 int in_global_scope();
+int lookup_local_to_global(char* name, SymbolType type);
 
 #endif

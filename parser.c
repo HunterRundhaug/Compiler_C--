@@ -73,14 +73,20 @@ char* token_name[] = {
 };
 
 void prog() {
-    if (curTok == kwINT && nextTok == ID) {
-        if(thirdTok == LPAREN){
+    if (curTok == kwINT) {
+        if(nextTok == ID){
+            if(thirdTok == LPAREN){
             func_defn();
+            }
+            else{
+                var_decl();
+            }
+            prog();
         }
         else{
-            var_decl();
+            match(kwINT); // just to increment the parser to be on the token causing error.
+            printStandardError(9, curTok);
         }
-        prog();
     }
     else if(curTok != EOF){
         printStandardError(9, curTok);
@@ -177,9 +183,14 @@ void stmt(){
 
 void fn_call(){
     if(chk_decl_flag == 1){
-        if(lookup_global_scope_with_same_type(curLexeme, SYM_FUNC) == 1){ // if 1, function was never declared.
+        int retVal = lookup_local_to_global(curLexeme, SYM_FUNC);
+        if(retVal == 1){ // if 1, function was never declared.
             fprintf(stderr, "ERROR LINE %d: Function %s was never defined\n", curLine, curLexeme);
             exit(1);
+        }
+        else if(retVal == 2){ // found a definition of the same ID but is not a SYM_FUNC
+            fprintf(stderr, "ERROR LINE %d: Function %s was defined as another type or somthing.\n", curLine, curLexeme);
+            exit(1);    
         }
     }
     match(ID);
