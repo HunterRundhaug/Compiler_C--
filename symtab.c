@@ -52,7 +52,7 @@ Scope* global_scope; // this will be at the end of the list because we prepend n
     // not implemented...
  }
 
- void add_new_symbol(char* name, SymbolType type){
+ Symbol* add_new_symbol(char* name, SymbolType type){
     if(table_head == NULL){
         fprintf(stderr, "ERROR: trying to add symbol to an empty table\n");
         exit(1);
@@ -64,9 +64,30 @@ Scope* global_scope; // this will be at the end of the list because we prepend n
 
     new_symbol->name = strdup(name);
     new_symbol->type = type;
+    return new_symbol;
 
     // printf("Lexeme: <%s> Symbol Type: <%s>\n", name, symbol_type_name[type]);
  }
+
+ void append_child_to_symbol(Symbol* parentSymbol, char* Cname, SymbolType Ctype){
+    Symbol* new_child = get_new_symbol();
+    new_child->name = Cname;
+    new_child->type = Ctype;
+    new_child->next = parentSymbol->children;
+    parentSymbol->children = new_child;
+ }
+
+int get_children_length(Symbol* head){
+    if(head == NULL){
+        return 0;
+    }
+    int count = 0;
+    Symbol* cur = head;
+    while(cur != NULL){
+        cur = cur->next;
+        count+=1;
+    }
+}
 
 /* ↓ ↓ ↓ ↓ Functions for mallocING new structs ↓ ↓ ↓ ↓ */
 Scope* get_new_scope() {
@@ -89,6 +110,7 @@ Symbol* get_new_symbol() {
     new_symbol->name = NULL;
     new_symbol->type = -1;
     new_symbol->next = NULL;
+    new_symbol->children = NULL;
     return new_symbol;
 }
 /* - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ - ↑ -*/
@@ -135,7 +157,7 @@ int lookup_global_scope_with_same_type(char* name, SymbolType type){
 }
 
 
-// 0 if found.
+// # of children if found.
 // 1 if not found.
 // 2 if found but type is different.
 int lookup_local_to_global(char* name, SymbolType type){
@@ -149,15 +171,15 @@ int lookup_local_to_global(char* name, SymbolType type){
         while(cur_sym != NULL){
             if(strcmp(name, cur_sym->name) == 0){
                 if(type != cur_sym->type){
-                    return 2;
+                    return -2;
                 }
-                return 0;
+                return get_children_length(cur_sym->children);
             }
             cur_sym = cur_sym->next;
         }
         cur_scope = cur_scope->next;
     }
-    return 1; // Not found.
+    return -1; // Not found.
 }
 
 // Returns 0 if input variable exists in current scope

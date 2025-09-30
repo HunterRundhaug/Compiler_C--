@@ -49,6 +49,9 @@ char* curLexeme;
 char* nextLexeme;
 char* thirdLexeme;
 
+Symbol* lastSymbolAdded;
+int optExpListCount;
+
 char* token_name[] = {
   "UNDEF",
   "ID",
@@ -134,7 +137,7 @@ void func_defn(){
         fprintf(stderr, "ERROR LINE %d: Function %s was ALREADY defined in the global scope\n", curLine, curLexeme);
         exit(1);
     }
-    add_new_symbol(curLexeme, SYM_FUNC);
+    lastSymbolAdded = add_new_symbol(curLexeme, SYM_FUNC);
     match(ID);
     add_new_scope(); // Add new scope because we are in a new function
     match(LPAREN);
@@ -161,6 +164,7 @@ void formals(){
         exit(1);
     }
     add_new_symbol(curLexeme, SYM_INT_VAR);
+    append_child_to_symbol(curLexeme, SYM_INT_VAR);
     match(ID);
     if(curTok == COMMA){
         match(COMMA);
@@ -279,13 +283,14 @@ void assg_stmt(){
 }
 
 void fn_call(){
+    optExpListCount = 0;
+    int retVal = lookup_local_to_global(curLexeme, SYM_FUNC);
     if(chk_decl_flag == 1){
-        int retVal = lookup_local_to_global(curLexeme, SYM_FUNC);
-        if(retVal == 1){ // if 1, function was never declared.
+        if(retVal == -1){ // if 1, function was never declared.
             fprintf(stderr, "ERROR LINE %d: Function %s was never defined\n", curLine, curLexeme);
             exit(1);
         }
-        else if(retVal == 2){ // found a definition of the same ID but is not a SYM_FUNC
+        else if(retVal == -2){ // found a definition of the same ID but is not a SYM_FUNC
             fprintf(stderr, "ERROR LINE %d: Function %s was defined as another type or somthing.\n", curLine, curLexeme);
             exit(1);    
         }
@@ -293,6 +298,12 @@ void fn_call(){
     match(ID);
     match(LPAREN);
     opt_expr_list();
+    if(chk_decl_flag == 1){
+        if(optExpListCount != retVal){
+            fprintf(stderr, "ERROR LINE %d: Function was called with incorrect number of arguments.\n", curLine, curLexeme);
+            exit(1);
+        }
+    }
     match(RPAREN);
 }
 
@@ -305,6 +316,7 @@ void opt_expr_list(){
 
 void expr_list(){
     arith_exp();
+    optExpListCount++;
     if(curTok == COMMA){
         match(COMMA);
         expr_list();
@@ -391,6 +403,7 @@ void increment_tokens(){
 
 // Main parse function
 int parse(void) {
+    lastSymbolAdded = NULL;
     add_new_scope(); // Append Global scope to symbol table
     increment_tokens();
     prog();
