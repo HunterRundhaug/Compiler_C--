@@ -164,7 +164,7 @@ void formals(){
         exit(1);
     }
     add_new_symbol(curLexeme, SYM_INT_VAR);
-    append_child_to_symbol(curLexeme, SYM_INT_VAR);
+    append_child_to_symbol(lastSymbolAdded,curLexeme, SYM_INT_VAR);
     match(ID);
     if(curTok == COMMA){
         match(COMMA);
@@ -300,7 +300,8 @@ void fn_call(){
     opt_expr_list();
     if(chk_decl_flag == 1){
         if(optExpListCount != retVal){
-            fprintf(stderr, "ERROR LINE %d: Function was called with incorrect number of arguments.\n", curLine, curLexeme);
+            fprintf(stderr, "ERROR LINE %d: Function was called with incorrect number of arguments.\n", curLine);
+            fprintf(stderr, "exprList:%d, retVal:%d \n", optExpListCount, retVal);
             exit(1);
         }
     }
@@ -315,8 +316,8 @@ void opt_expr_list(){
 }
 
 void expr_list(){
-    arith_exp();
     optExpListCount++;
+    arith_exp();
     if(curTok == COMMA){
         match(COMMA);
         expr_list();

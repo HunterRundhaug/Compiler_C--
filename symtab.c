@@ -87,6 +87,7 @@ int get_children_length(Symbol* head){
         cur = cur->next;
         count+=1;
     }
+    return count;
 }
 
 /* ↓ ↓ ↓ ↓ Functions for mallocING new structs ↓ ↓ ↓ ↓ */
