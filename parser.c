@@ -18,6 +18,15 @@ void formals();
 void opt_var_decls();
 void opt_stmt_list();
 void stmt();
+int might_be_statement();
+void if_stmt();
+void expr_list();
+void bool_exp();
+void arith_exp();
+void relop();
+void while_stmt();
+void return_stmt();
+void assg_stmt();
 void fn_call();
 void opt_expr_list();
 void match(int tok);
@@ -122,7 +131,6 @@ void type(){
 void func_defn(){
     type();
     if( chk_decl_flag == 1 && lookup_global_scope(curLexeme, SYM_FUNC) == 0){ // if 0, function was already declared, or a variable with same name.
-        printf("Triggere\n");
         fprintf(stderr, "ERROR LINE %d: Function %s was ALREADY defined in the global scope\n", curLine, curLexeme);
         exit(1);
     }
@@ -169,15 +177,104 @@ void opt_var_decls(){
 }
 
 void opt_stmt_list() {
-    if (curTok == ID) {
+    if (might_be_statement() == 0) {
         stmt();
         opt_stmt_list();
     }
     // else epsilon (do nothing)
 }
 
+int might_be_statement(){
+    if(curTok == ID){
+        return 0;
+    }
+    else if(curTok == kwWHILE){
+        return 0;
+    }
+    else if(curTok == kwIF){
+        return 0;
+    }
+    else if(curTok == kwRETURN){
+        return 0;
+    }
+    else if(curTok == LBRACE){
+        return 0;
+    }
+    else if(curTok == SEMI){
+        return 0;
+    }
+    else{
+        return 1;
+    }
+}
+
 void stmt(){
-    fn_call();
+    if(curTok == ID){
+        if(nextTok == opASSG){
+            assg_stmt();
+        }
+        else{
+            fn_call();
+            match(SEMI);
+        }
+    }
+    else if(curTok == kwWHILE){
+        while_stmt();
+    }
+    else if(curTok == kwIF){
+        if_stmt();
+    }
+    else if(curTok == kwRETURN){
+        return_stmt();
+    }
+    else if(curTok == LBRACE){
+        match(LBRACE);
+        opt_stmt_list();
+        match(RBRACE);
+    }
+    else if(curTok == SEMI){
+        match(SEMI);
+    }
+    // or epsilon
+    
+}
+
+void if_stmt(){
+    match(kwIF);
+    match(LPAREN);
+    bool_exp();
+    match(RPAREN);
+    stmt();
+    if(curTok == kwELSE){
+        match(kwELSE);
+        stmt();
+    }
+}
+
+void while_stmt(){
+    
+    match(kwWHILE);
+    match(LPAREN);
+    bool_exp();
+    match(RPAREN);
+    stmt();
+}
+
+void return_stmt(){
+    match(kwRETURN);
+    if(curTok == SEMI){
+        match(SEMI);
+    }
+    else{
+        arith_exp();
+        match(SEMI);
+    }
+}
+
+void assg_stmt(){
+    match(ID);
+    match(opASSG);
+    arith_exp();
     match(SEMI);
 }
 
@@ -199,9 +296,59 @@ void fn_call(){
     match(RPAREN);
 }
 
-
 void opt_expr_list(){
     // empty
+    if(curTok == ID || curTok == INTCON){
+        expr_list();
+    }
+}
+
+void expr_list(){
+    arith_exp();
+    if(curTok == COMMA){
+        match(COMMA);
+        expr_list();
+    }
+}
+
+void bool_exp(){
+    arith_exp();
+    relop();
+    arith_exp();
+}
+
+void arith_exp(){
+    if(curTok == ID){
+        match(ID);
+    }
+    else{
+        match(INTCON);
+    }
+}
+
+void relop(){
+    if(curTok == opEQ){
+        match(opEQ);
+    }
+    else if(curTok == opNE){
+        match(opNE);
+    }
+    else if(curTok == opLE){
+        match(opLE);
+    }
+    else if(curTok == opLT){
+        match(opLT);
+    }
+    else if(curTok == opGE){
+        match(opGE);
+    }
+    else if(curTok == opGT){
+        match(opGT);
+    }
+    else{
+        printStandardError(opEQ, curTok);
+        exit(1);
+    }
 }
 
 void match(int tok){

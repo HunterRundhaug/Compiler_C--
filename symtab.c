@@ -146,9 +146,6 @@ int lookup_local_to_global(char* name, SymbolType type){
     Scope* cur_scope = table_head;
     while(cur_scope != NULL){
         Symbol* cur_sym = cur_scope->symbols;
-        if(cur_sym == NULL){
-            return 1;
-        }
         while(cur_sym != NULL){
             if(strcmp(name, cur_sym->name) == 0){
                 if(type != cur_sym->type){
