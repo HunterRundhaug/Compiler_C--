@@ -98,6 +98,7 @@ void prog() {
         else{
             match(kwINT); // just to increment the parser to be on the token causing error.
             printStandardError(9, curTok);
+            exit(1);
         }
     }
     else if(curTok != EOF){
@@ -239,7 +240,11 @@ void stmt(){
     else if(curTok == SEMI){
         match(SEMI);
     }
-    // or epsilon
+    else if( chk_decl_flag == 1) {
+        printStandardError(kwIF, curTok);
+        fprintf(stderr, "ERROR LINE %d: Expected statement after 'if' or 'else'\n", curLine);
+        exit(1);
+    }
     
 }
 
@@ -330,11 +335,22 @@ void bool_exp(){
     arith_exp();
 }
 
-void arith_exp(){
-    if(curTok == ID){
+void arith_exp() {
+    if(curTok == ID) {
+        if (chk_decl_flag == 1) {
+            int retVal = lookup_local_to_global(curLexeme, SYM_INT_VAR);
+            if (retVal == -1) { 
+                fprintf(stderr, "ERROR LINE %d: Variable %s was never declared.\n", curLine, curLexeme);
+                exit(1);
+            }
+            if (retVal == -2) { 
+                fprintf(stderr, "ERROR LINE %d: %s is a function, not a variable.\n", curLine, curLexeme);
+                exit(1);
+            }
+        }
         match(ID);
     }
-    else{
+    else {
         match(INTCON);
     }
 }

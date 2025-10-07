@@ -1,12 +1,7 @@
-/*
- * A sample G2 program
- */
+int f(int x, int y) {
+  return x;
+}
 
-
- int a(int b, int c){
-  int g;
-  a(5, 6);
-
-  g();
- }
-
+int g() {
+  f(x, y);  /* x, y are undeclared */
+}
