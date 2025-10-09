@@ -1,0 +1,9 @@
+#!/bin/bash
+make clean 
+
+make compile
+
+./compile --print_ast < test.c
+
+echo complete $(echo $?)
+

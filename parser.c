@@ -1,39 +1,61 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include "parser.h"
 #include "symtab.h"
+#include "ast.h"          /* for NodeType and print_ast */
 
-// Prototypes //
+/* prototypes for AST helpers (implemented in ast.c) */
+extern void *make_func_def(char *name, int nargs, char **args, void *body);
+extern void *make_func_call(char *callee, void *args);
+extern void *make_stmt_list(void *head, void *rest);
+extern void *make_expr_list(void *head, void *rest);
+extern void *make_identifier(char *name);
+extern void *make_intconst(int val);
+extern void *make_expr(NodeType op_type, void *lhs, void *rhs);
+extern void *make_assg(char *lhs, void *rhs);
+extern void *make_if(void *expr, void *thenp, void *elsep);
+extern void *make_while(void *expr, void *body);
+extern void *make_return(void *expr);
+
+/* getter prototypes from ast.c */
+extern NodeType ast_node_type(void *ptr);
+extern void *expr_list_head(void *ptr);
+extern void *expr_list_rest(void *ptr);
+extern char *expr_id_name(void *ptr);
+
+/* Prototypes -- updated to return AST nodes (void *) where appropriate */
 int parse(void);
 void prog();
 void var_decl();
 void id_list();
 void type();
-void func_defn();
-void opt_formals();
-void formals();
+void *func_defn();
+void *opt_formals();
+void *formals();
 void opt_var_decls();
-void opt_stmt_list();
-void stmt();
+void *opt_stmt_list();
+void *stmt();
 int might_be_statement();
-void if_stmt();
-void expr_list();
-void bool_exp();
-void arith_exp();
-void relop();
-void while_stmt();
-void return_stmt();
-void assg_stmt();
-void fn_call();
-void opt_expr_list();
+void *if_stmt();
+void *expr_list();
+void *bool_exp();
+void *arith_exp();
+NodeType relop();
+void *while_stmt();
+void *return_stmt();
+void *assg_stmt();
+void *fn_call();
+void *opt_expr_list();
 void match(int tok);
 void printStandardError(int,int);
-// ----------- //
+void increment_tokens();
+
+/* ----------- */
 
 extern int chk_decl_flag;
+extern int print_ast_flag; /* set by driver.c when --print_ast passed */
 
 int curTok;
 int nextTok;
@@ -84,38 +106,40 @@ char* token_name[] = {
   "EOF"
 };
 
+/* ------------------ parser implementation ------------------ */
+
+/* prog: processes top-level declarations (functions or globals) */
 void prog() {
     if (curTok == kwINT) {
         if(nextTok == ID){
             if(thirdTok == LPAREN){
-            func_defn();
-            }
-            else{
+                void *fnode = func_defn();
+                (void)fnode;
+            } else {
                 var_decl();
             }
             prog();
-        }
-        else{
-            match(kwINT); // just to increment the parser to be on the token causing error.
+        } else {
+            match(kwINT);
             printStandardError(9, curTok);
             exit(1);
         }
-    }
-    else if(curTok != EOF){
+    } else if(curTok != EOF){
         printStandardError(9, curTok);
         exit(1);
     }
-    // else epsilon (do nothing)
 }
 
+/* var_decl: no AST produced for global var decls */
 void var_decl(){
     type();
     id_list();
     match(SEMI);
 }
 
+/* id_list: adds variable(s) to current scope */
 void id_list(){
-    if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){ // if 0, variable with same name was already declared.
+    if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){
         fprintf(stderr, "ERROR LINE %d: INT variable %s was ALREADY defined in the current scope\n", curLine, curLexeme);
         exit(1);
     }
@@ -132,177 +156,224 @@ void type(){
     match(kwINT);
 }
 
-void func_defn(){
+/* func_defn: build AST for the function */
+void *func_defn(){
     type();
-    if( chk_decl_flag == 1 && lookup_global_scope(curLexeme, SYM_FUNC) == 0){ // if 0, function was already declared, or a variable with same name.
+    if( chk_decl_flag == 1 && lookup_global_scope(curLexeme, SYM_FUNC) == 0){
         fprintf(stderr, "ERROR LINE %d: Function %s was ALREADY defined in the global scope\n", curLine, curLexeme);
         exit(1);
     }
+
     lastSymbolAdded = add_new_symbol(curLexeme, SYM_FUNC);
+    char *funcName = strdup(curLexeme);
     match(ID);
-    add_new_scope(); // Add new scope because we are in a new function
+
+    add_new_scope();
     match(LPAREN);
-    opt_formals();
+    void *formals_list = opt_formals();
     match(RPAREN);
+
     match(LBRACE);
     opt_var_decls();
-    opt_stmt_list();
+    void *body = opt_stmt_list();
     match(RBRACE);
-    pop_current_scope(); // leave this functions scope
-}
 
-void opt_formals(){
-    if(curTok == kwINT){
-        formals();
+    int nargs = 0;
+    char **args_arr = NULL;
+    if (formals_list != NULL) {
+        void *cur = formals_list;
+        while (cur != NULL) {
+            nargs++;
+            cur = expr_list_rest(cur);
+        }
+        args_arr = malloc(sizeof(char*) * nargs);
+        int idx = 0;
+        cur = formals_list;
+        while (cur != NULL) {
+            void *hd = expr_list_head(cur);
+            args_arr[idx++] = strdup(expr_id_name(hd));
+            cur = expr_list_rest(cur);
+        }
     }
-    // empty
+
+    void *func_ast = make_func_def(funcName, nargs, args_arr, body);
+
+    if (print_ast_flag) {
+        print_ast(func_ast);
+    }
+
+    pop_current_scope();
+    return func_ast;
 }
 
-void formals(){
+/* opt_formals: returns EXPR_LIST of IDENTIFIER nodes or NULL */
+void *opt_formals(){
+    if(curTok == kwINT){
+        return formals();
+    }
+    return NULL;
+}
+
+/* formals: parse one or more formals and return EXPR_LIST */
+void *formals(){
     type();
-    if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){ // if 0, int variable was already declared.
+    if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){
         fprintf(stderr, "ERROR LINE %d: INT variable %s was ALREADY defined in the current scope\n", curLine, curLexeme);
         exit(1);
     }
+
     add_new_symbol(curLexeme, SYM_INT_VAR);
-    append_child_to_symbol(lastSymbolAdded,curLexeme, SYM_INT_VAR);
+    append_child_to_symbol(lastSymbolAdded, curLexeme, SYM_INT_VAR);
+
+    char *paramName = strdup(curLexeme);
+    void *idnode = make_identifier(paramName);
     match(ID);
+
     if(curTok == COMMA){
         match(COMMA);
-        formals();
+        void *rest = formals();
+        return make_expr_list(idnode, rest);
+    } else {
+        return make_expr_list(idnode, NULL);
     }
 }
 
+/* opt_var_decls: parse local variable declarations (no AST) */
 void opt_var_decls(){
     if(curTok == kwINT){
         var_decl();
         opt_var_decls();
     }
-    // or epsilon
 }
 
-void opt_stmt_list() {
+/* opt_stmt_list: returns STMT_LIST (possibly NULL) */
+void *opt_stmt_list() {
     if (might_be_statement() == 0) {
-        stmt();
-        opt_stmt_list();
+        void *s = stmt();
+        void *rest = opt_stmt_list();
+        /* Preserve explicit empty statements as list nodes */
+        if (s == NULL) {
+            return make_stmt_list(NULL, rest);
+        }
+        return make_stmt_list(s, rest);
     }
-    // else epsilon (do nothing)
+    return NULL;
 }
 
 int might_be_statement(){
-    if(curTok == ID){
+    if(curTok==ID||curTok==kwWHILE||curTok==kwIF||curTok==kwRETURN||curTok==LBRACE||curTok==SEMI)
         return 0;
-    }
-    else if(curTok == kwWHILE){
-        return 0;
-    }
-    else if(curTok == kwIF){
-        return 0;
-    }
-    else if(curTok == kwRETURN){
-        return 0;
-    }
-    else if(curTok == LBRACE){
-        return 0;
-    }
-    else if(curTok == SEMI){
-        return 0;
-    }
-    else{
-        return 1;
-    }
+    return 1;
 }
 
-void stmt(){
+/* stmt: returns AST for the statement; NULL for empty ';' */
+void *stmt(){
     if(curTok == ID){
         if(nextTok == opASSG){
-            assg_stmt();
-        }
-        else{
-            fn_call();
+            return assg_stmt();
+        } else {
+            void *call = fn_call();
             match(SEMI);
+            return call;
         }
     }
     else if(curTok == kwWHILE){
-        while_stmt();
+        return while_stmt();
     }
     else if(curTok == kwIF){
-        if_stmt();
+        return if_stmt();
     }
     else if(curTok == kwRETURN){
-        return_stmt();
+        return return_stmt();
     }
     else if(curTok == LBRACE){
         match(LBRACE);
-        opt_stmt_list();
+        void *body = opt_stmt_list();
         match(RBRACE);
+        if (body == NULL)
+            return make_stmt_list(NULL, NULL);
+        return body;
     }
     else if(curTok == SEMI){
         match(SEMI);
+        return NULL;
     }
-    else if( chk_decl_flag == 1) {
+    else if(chk_decl_flag == 1){
         printStandardError(kwIF, curTok);
         fprintf(stderr, "ERROR LINE %d: Expected statement after 'if' or 'else'\n", curLine);
         exit(1);
     }
-    
+    return NULL;
 }
 
-void if_stmt(){
+/* if_stmt: returns IF AST node */
+void *if_stmt(){
     match(kwIF);
     match(LPAREN);
-    bool_exp();
+    void *cond = bool_exp();
     match(RPAREN);
-    stmt();
+    void *thenp = stmt();
+    void *elsep = NULL;
     if(curTok == kwELSE){
         match(kwELSE);
-        stmt();
+        elsep = stmt();
     }
+    return make_if(cond, thenp, elsep);
 }
 
-void while_stmt(){
-    
+/* while_stmt: returns WHILE AST node */
+void *while_stmt(){
     match(kwWHILE);
     match(LPAREN);
-    bool_exp();
+    void *cond = bool_exp();
     match(RPAREN);
-    stmt();
+    void *body = stmt();
+    return make_while(cond, body);
 }
 
-void return_stmt(){
+/* return_stmt: returns RETURN AST node */
+void *return_stmt(){
     match(kwRETURN);
     if(curTok == SEMI){
         match(SEMI);
-    }
-    else{
-        arith_exp();
+        return make_return(NULL);
+    } else {
+        void *expr = arith_exp();
         match(SEMI);
+        return make_return(expr);
     }
 }
 
-void assg_stmt(){
+/* assg_stmt: returns ASSG AST node */
+void *assg_stmt(){
+    char *lhs = strdup(curLexeme);
     match(ID);
     match(opASSG);
-    arith_exp();
+    void *rhs = arith_exp();
     match(SEMI);
+    return make_assg(lhs, rhs);
 }
 
-void fn_call(){
+/* fn_call: returns FUNC_CALL AST node, performs semantic checks */
+void *fn_call(){
     optExpListCount = 0;
     int retVal = lookup_local_to_global(curLexeme, SYM_FUNC);
     if(chk_decl_flag == 1){
-        if(retVal == -1){ // if 1, function was never declared.
+        if(retVal == -1){ /* function never declared */
             fprintf(stderr, "ERROR LINE %d: Function %s was never defined\n", curLine, curLexeme);
             exit(1);
         }
-        else if(retVal == -2){ // found a definition of the same ID but is not a SYM_FUNC
-            fprintf(stderr, "ERROR LINE %d: Function %s was defined as another type or somthing.\n", curLine, curLexeme);
-            exit(1);    
+        else if(retVal == -2){ /* found a definition of same ID but not a function */
+            fprintf(stderr, "ERROR LINE %d: Function %s was defined as another type or something.\n", curLine, curLexeme);
+            exit(1);
         }
     }
+
+    char *callee = strdup(curLexeme);
     match(ID);
     match(LPAREN);
-    opt_expr_list();
+    void *args = opt_expr_list(); /* EXPR_LIST or NULL */
+
     if(chk_decl_flag == 1){
         if(optExpListCount != retVal){
             fprintf(stderr, "ERROR LINE %d: Function was called with incorrect number of arguments.\n", curLine);
@@ -311,68 +382,95 @@ void fn_call(){
         }
     }
     match(RPAREN);
+
+    return make_func_call(callee, args);
 }
 
-void opt_expr_list(){
-    // empty
+/* opt_expr_list: returns EXPR_LIST or NULL */
+void *opt_expr_list(){
     if(curTok == ID || curTok == INTCON){
-        expr_list();
+        return expr_list();
     }
+    return NULL;
 }
 
-void expr_list(){
+/* expr_list: builds EXPR_LIST AST and increments optExpListCount */
+void *expr_list(){
     optExpListCount++;
-    arith_exp();
+    void *head = arith_exp();
     if(curTok == COMMA){
         match(COMMA);
-        expr_list();
+        void *rest = expr_list();
+        return make_expr_list(head, rest);
+    } else {
+        return make_expr_list(head, NULL);
     }
 }
 
-void bool_exp(){
-    arith_exp();
-    relop();
-    arith_exp();
+/* bool_exp: a relational expression -> returns Expr AST (EQ/NE/GT/...) */
+void *bool_exp(){
+    void *lhs = arith_exp();
+    NodeType op = relop();
+    void *rhs = arith_exp();
+    return make_expr(op, lhs, rhs);
 }
 
-void arith_exp() {
+/* arith_exp: returns IDENTIFIER or INTCONST AST node (G2 arithmetic is simple) */
+void *arith_exp() {
     if(curTok == ID) {
+        /* semantic checking: ensure ID is a variable, not a function */
         if (chk_decl_flag == 1) {
             int retVal = lookup_local_to_global(curLexeme, SYM_INT_VAR);
-            if (retVal == -1) { 
+            if (retVal == -1) {
                 fprintf(stderr, "ERROR LINE %d: Variable %s was never declared.\n", curLine, curLexeme);
                 exit(1);
             }
-            if (retVal == -2) { 
+            if (retVal == -2) {
                 fprintf(stderr, "ERROR LINE %d: %s is a function, not a variable.\n", curLine, curLexeme);
                 exit(1);
             }
         }
+        char *name = strdup(curLexeme);
         match(ID);
+        return make_identifier(name);
+    }
+    else if (curTok == INTCON) {
+        int val = atoi(curLexeme);
+        match(INTCON);
+        return make_intconst(val);
     }
     else {
-        match(INTCON);
+        /* token not expected for arith_exp according to grammar */
+        printStandardError(ID, curTok);
+        exit(1);
     }
 }
 
-void relop(){
+/* relop: returns NodeType corresponding to relational operator */
+NodeType relop(){
     if(curTok == opEQ){
         match(opEQ);
+        return EQ;
     }
     else if(curTok == opNE){
         match(opNE);
+        return NE;
     }
     else if(curTok == opLE){
         match(opLE);
+        return LE;
     }
     else if(curTok == opLT){
         match(opLT);
+        return LT;
     }
     else if(curTok == opGE){
         match(opGE);
+        return GE;
     }
     else if(curTok == opGT){
         match(opGT);
+        return GT;
     }
     else{
         printStandardError(opEQ, curTok);
@@ -380,10 +478,10 @@ void relop(){
     }
 }
 
+/* match, error helpers, and token initialization */
 void match(int tok){
-    //printf("cur:%s, expected:%s\n", token_name[curTok], token_name[tok]);
     if (curTok == tok) {
-        curTok = nextTok; // advance to next token
+        curTok = nextTok;
         curLine = nextTokLine;
         curLexeme = nextLexeme;
 
@@ -418,10 +516,10 @@ void increment_tokens(){
     thirdLexeme = get_lexeme();
 }
 
-// Main parse function
+/* Main parse function */
 int parse(void) {
     lastSymbolAdded = NULL;
-    add_new_scope(); // Append Global scope to symbol table
+    add_new_scope(); /* Append Global scope to symbol table */
     increment_tokens();
     prog();
     return 0;
