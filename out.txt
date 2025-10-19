@@ -1,15 +1,72 @@
-Matched token: kwINT
-Matched token: ID
-Matched token: LPAREN
-Matched token: RPAREN
-Matched token: LBRACE
-Matched token: ID
-Matched token: LPAREN
-Matched token: RPAREN
-Matched token: SEMI
-Matched token: ID
-Matched token: LPAREN
-Matched token: RPAREN
-Matched token: SEMI
-Matched token: RBRACE
-Matched token: (null)
+func_def: f
+  formals: x, y, z
+  body:
+/* func_def: f */
+
+func_def: g
+  formals: 
+  body:
+    {
+        if (x == y):
+        then:
+            {
+                g()
+                x = 12
+                f(y, x, 93)
+            }
+        else:
+            while (x > y):
+            end_while
+        end_if
+        return: 5
+    }
+/* func_def: g */
+
+func_def: f
+  formals: x, y, z
+  body:
+/* func_def: f */
+
+func_def: g
+  formals: 
+  body:
+    {
+        if (x == y):
+        then:
+            {
+                g()
+                x = 12
+                f(y, x, 93)
+            }
+        else:
+            while (x > y):
+            end_while
+        end_if
+        return: 5
+    }
+/* func_def: g */
+
+func_def: f
+  formals: x, y, z
+  body:
+/* func_def: f */
+
+func_def: g
+  formals: 
+  body:
+    {
+        if (x == y):
+        then:
+            {
+                g()
+                x = 12
+                f(y, x, 93)
+            }
+        else:
+            while (x > y):
+            end_while
+        end_if
+        return: 5
+    }
+/* func_def: g */
+

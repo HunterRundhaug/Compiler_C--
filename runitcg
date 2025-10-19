@@ -3,7 +3,7 @@ make clean
 
 make compile
 
-./compile --print_ast < test.c >> out.txt
+./compile --gen_code  < test.c 
 
 echo complete $(echo $?)
 

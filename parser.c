@@ -4,7 +4,8 @@
 #include <ctype.h>
 #include "parser.h"
 #include "symtab.h"
-#include "ast.h"          /* for NodeType and print_ast */
+#include "ast.h"          
+#include "codegen.h"    
 
 /* prototypes for AST helpers (implemented in ast.c) */
 extern void *make_func_def(char *name, int nargs, char **args, void *body);
@@ -55,7 +56,8 @@ void increment_tokens();
 /* ----------- */
 
 extern int chk_decl_flag;
-extern int print_ast_flag; /* set by driver.c when --print_ast passed */
+extern int print_ast_flag; 
+extern int gen_code_flag; 
 
 int curTok;
 int nextTok;
@@ -202,6 +204,14 @@ void *func_defn(){
         print_ast(func_ast);
     }
 
+     if (gen_code_flag) {
+        codegen_init_once();      /* prints the println runtime once */
+        codegen_func(func_ast);   /* AST -> TAC -> MIPS for this function */
+    }
+
+    pop_current_scope();
+    return func_ast;
+
     pop_current_scope();
     return func_ast;
 }
@@ -286,14 +296,14 @@ void *stmt(){
     else if(curTok == kwRETURN){
         return return_stmt();
     }
-    else if(curTok == LBRACE){
-        match(LBRACE);
-        void *body = opt_stmt_list();
-        match(RBRACE);
-        if (body == NULL)
-            return make_stmt_list(NULL, NULL);
-        return body;
-    }
+    else if (curTok == LBRACE) {
+    match(LBRACE);
+    void *body = opt_stmt_list();
+    match(RBRACE);
+    // If the block is empty, don't fabricate a stmt_list node.
+    // Let the parent (e.g., while/if/function body) decide how to print braces.
+    return body;  // return NULL if empty, otherwise the inner list
+}
     else if(curTok == SEMI){
         match(SEMI);
         return NULL;
@@ -516,10 +526,20 @@ void increment_tokens(){
     thirdLexeme = get_lexeme();
 }
 
+static void predeclare_builtins(void) {
+    // Pretend we saw: int println(int);
+    Symbol *f = add_new_symbol("println", SYM_FUNC);
+    if (f) {
+        // one int parameter (name doesn't matter)
+        append_child_to_symbol(f, "_x", SYM_INT_VAR);
+    }
+}
+
 /* Main parse function */
 int parse(void) {
     lastSymbolAdded = NULL;
     add_new_scope(); /* Append Global scope to symbol table */
+    predeclare_builtins();
     increment_tokens();
     prog();
     return 0;
