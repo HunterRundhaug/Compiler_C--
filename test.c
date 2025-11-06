@@ -1,16 +1,8 @@
-int x, y;
-int f(int x, int y, int z) {
-}
-
-int g() {
+int main() {
   int x, y;
-  if (x == y) {
-    g();
-    x = 12;
-    f(y, x, 93);
-  }
-  else
-    while (x > y)
-      ;
-  return 5;
+  x = 2 + 3 * 4;
+  y = x - 5;
+  if (x > y) { println(x); } else { println(y); }
+  while (y < 20) { y = y + 3; }
+  println(y);
 }

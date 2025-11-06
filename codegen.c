@@ -1,7 +1,7 @@
 /*
  * File: codegen.c
  * Author: Hunter Rundhaug
- * Purpose: Final code generation (AST -> TAC -> MIPS) for Milestone 1 (G2 w/o control flow/return).
+ * Purpose: Final code generation (AST -> TAC -> MIPS) for Milestone 2 (G2 incl. control flow/return).
  */
 
 #include <stdio.h>
@@ -10,7 +10,7 @@
 
 #include "ast.h"
 #include "codegen.h"
-#include "symtab.h"   
+#include "symtab.h"
 
 /* ------------------------
  *   Minimal TAC (3-address)
@@ -18,19 +18,37 @@
 
 typedef enum {
     TAC_ENTER,     /* enter f          : x = func name */
-    TAC_LEAVE,     /* leave f          : x = func name */
+    TAC_LEAVE,     /* leave f            : x = func name */
 
-    TAC_COPY,      /* x := y           : x=dst, y=src (src may be #imm) */
+    TAC_COPY,      /* x := y            : x=dst, y=src (src may be #imm) */
+    TAC_ADD,       /* x := y + z         */
+    TAC_SUB,       /* x := y - z         */
+    TAC_MUL,       /* x := y * z         */
+    TAC_DIV,       /* x := y / z         */
 
-    TAC_PARAM,     /* param x          : x may be #imm */
-    TAC_CALL       /* call p, n        : x = callee name, n = argc   */
+    TAC_PARAM,     /* param x            : x may be #imm */
+    TAC_CALL,      /* call p, n         : x = callee name, n = argc */
+
+    TAC_LABEL,     /* label L            : x = label name */
+    TAC_GOTO,      /* goto L             : x = label name */
+
+    /* conditional branches (relational operators) */
+    TAC_IFEQ,      /* if (y == z) goto x */
+    TAC_IFNE,
+    TAC_IFLT,
+    TAC_IFLE,
+    TAC_IFGT,
+    TAC_IFGE,
+
+    TAC_RETURN     /* return (optional y) */
 } TacKind;
 
 typedef struct Tac {
     TacKind op;
-    char   *x;     
-    char   *y;    
-    int     n;     
+    char   *x;     /* dst or label target (or callee name) */
+    char   *y;     /* src1 */
+    char   *z;     /* src2 (for binops / if relops) */
+    int     n;     /* argc for call */
     struct Tac *next;
 } Tac;
 
@@ -48,20 +66,61 @@ static Tac *tac_mk0(TacKind k) {
     t->op = k;
     return t;
 }
+static Tac *tac_mk1(TacKind k, const char *x) {
+    Tac *t = tac_mk0(k);
+    t->x = x ? strdup(x) : NULL;
+    return t;
+}
+static Tac *tac_mk2(TacKind k, const char *x, const char *y) {
+    Tac *t = tac_mk0(k);
+    t->x = x ? strdup(x) : NULL;
+    t->y = y ? strdup(y) : NULL;
+    return t;
+}
+static Tac *tac_mk3(TacKind k, const char *x, const char *y, const char *z) {
+    Tac *t = tac_mk0(k);
+    t->x = x ? strdup(x) : NULL;
+    t->y = y ? strdup(y) : NULL;
+    t->z = z ? strdup(z) : NULL;
+    return t;
+}
 
-static Tac *tac_enter(const char *fname) { Tac *t=tac_mk0(TAC_ENTER); t->x=strdup(fname); return t; }
-static Tac *tac_leave(const char *fname) { Tac *t=tac_mk0(TAC_LEAVE); t->x=strdup(fname); return t; }
-
-static Tac *tac_copy (const char *dst, const char *src) { Tac *t=tac_mk0(TAC_COPY); t->x=strdup(dst); t->y=strdup(src); return t; }
-static Tac *tac_param(const char *a)   { Tac *t=tac_mk0(TAC_PARAM); t->x=strdup(a); return t; }
-static Tac *tac_call (const char *p,int n){ Tac *t=tac_mk0(TAC_CALL); t->x=strdup(p); t->n=n; return t; }
+static Tac *tac_enter(const char *fname)     { return tac_mk1(TAC_ENTER, fname); }
+static Tac *tac_leave(const char *fname)     { return tac_mk1(TAC_LEAVE, fname); }
+static Tac *tac_copy (const char *dst, const char *src) { return tac_mk2(TAC_COPY, dst, src); }
+static Tac *tac_binop(TacKind k,const char *dst,const char *a,const char *b){ return tac_mk3(k,dst,a,b); }
+static Tac *tac_param(const char *a)         { return tac_mk1(TAC_PARAM, a); }
+static Tac *tac_call (const char *p,int n)   { Tac *t=tac_mk1(TAC_CALL, p); t->n=n; return t; }
+static Tac *tac_label(const char *L)         { return tac_mk1(TAC_LABEL, L); }
+static Tac *tac_goto (const char *L)         { return tac_mk1(TAC_GOTO,  L); }
+static Tac *tac_if(TacKind k,const char *L,const char *a,const char *b){ return tac_mk3(k,L,a,b); }
+static Tac *tac_return0(void)                { return tac_mk0(TAC_RETURN); }
+static Tac *tac_return1(const char *a)       { return tac_mk2(TAC_RETURN, NULL, a); }
 
 static int is_imm(const char *s) { return s && s[0] == '#'; }
 static int imm_val(const char *s) { return atoi(s ? s+1 : "0"); }
 
 /* ------------------------
- *   Local stack allocation
+ *   Name factories (temps/labels)
  * ------------------------ */
+
+static int temp_no = 0;
+static int label_no = 0;
+
+static char *new_temp_name(void) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "_t%d", temp_no++);
+    return strdup(buf);
+}
+static char *new_label_name(void) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "L%d", label_no++);
+    return strdup(buf);
+}
+
+/* ------------------------
+ *   Local stack allocation
+ * ----------- ------- ----- */
 
 typedef struct {
     char *name;
@@ -72,7 +131,7 @@ typedef struct {
     Local *arr;
     int    len;
     int    cap;
-    int    next_off; /* next negative offset (starts at -4, then -8, ...) */
+    int    next_off; /* next negative offset (starts at -4, then -8, */
 } Locals;
 
 static void locals_init(Locals *L) {
@@ -81,7 +140,7 @@ static void locals_init(Locals *L) {
 static void locals_free(Locals *L) {
     for (int i=0;i<L->len;i++) free(L->arr[i].name);
     free(L->arr);
-    locals_init(L);
+    L->arr=NULL; L->len=L->cap=0; L->next_off=-4;
 }
 static void locals_reserve(Locals *L, int need) {
     if (L->cap >= need) return;
@@ -144,7 +203,7 @@ static void ensure_global_emitted(const char *name){
 }
 
 /* ------------------------
- *  PARAM/LOCAL/GLOBAL classify
+ *  PARAM LOCAL GLOBAL classify
  * ------------------------ */
 
 typedef enum { CL_PARAM, CL_LOCAL, CL_GLOBAL } Class;
@@ -152,26 +211,24 @@ typedef enum { CL_PARAM, CL_LOCAL, CL_GLOBAL } Class;
 static int formal_index_of(void *func_ast, const char *name){
     int n = func_def_nargs(func_ast);
     for (int i=1;i<=n;i++){
-        const char *arg = func_def_argname(func_ast, i);
+        char *arg = func_def_argname(func_ast, i);
         if (arg && strcmp(arg, name)==0) return i; /* 1-based */
     }
     return 0;
 }
 
-// Use current function scope (still open during codegen) + globals 
+// Use current function scope (still open during codegen) + globals
 static Class classify_ident(void *func_ast, const char *name){
     if (!name || !*name) return CL_LOCAL;
     if (formal_index_of(func_ast, name) > 0) return CL_PARAM;
 
-    // local?  lookup_in_current_scope returns 0 when found in your parser 
-    int loc = lookup_in_current_scope((char*)name, SYM_INT_VAR);
-    if (loc == 0) return CL_LOCAL;
+    /* local?  lookup_in_current_scope returns 0 when found in parser */
+    if (lookup_in_current_scope((char*)name, SYM_INT_VAR) == 0) return CL_LOCAL;
 
-    /* global? lookup_global_scope returned 0 when found in your parser */
-    int glob = lookup_global_scope((char*)name, SYM_INT_VAR);
-    if (glob == 0) return CL_GLOBAL;
+    /* global? lookup_global_scope returned 0 when found */
+    if (lookup_global_scope((char*)name, SYM_INT_VAR) == 0) return CL_GLOBAL;
 
-    /* default: treat as local */
+    /* temporaries or unknowns: treat as local */
     return CL_LOCAL;
 }
 
@@ -181,117 +238,276 @@ static int param_offset_1based(int i){
 }
 
 /* ------------------------
- *   AST -> TAC (Milestone 1)
+ *   AST -> TAC helpers
  * ------------------------ */
 
-static void ast_to_tac_stmt(void *stmt);   /* fwd */
+static char *gen_expr_val(void *func_ast, void *expr);     /* returns operand string (temp, id, or #imm) */
+static void ast_to_tac_stmt(void *func_ast, void *stmt);   /* forward */
 
-static void ast_to_tac_stmt_list(void *sl) {
+static void ast_to_tac_stmt_list(void *func_ast, void *sl) {
     while (sl) {
         void *head = stmt_list_head(sl);
-        if (head) ast_to_tac_stmt(head);
+        if (head) ast_to_tac_stmt(func_ast, head);
         sl = stmt_list_rest(sl);
     }
 }
 
-/* Convert expr (ID | INTCONST for Milestone 1) to a TAC operand string. */
-static char *expr_as_operand(void *expr) {
+/* Convert a primary to an operand string (id, int, or generated temp). */
+static char *expr_as_operand_prim(void *expr) {
     NodeType t = ast_node_type(expr);
     if (t == IDENTIFIER) {
-        const char *nm = expr_id_name(expr);
+        char *nm = expr_id_name(expr);
         return strdup(nm ? nm : "");
     } else if (t == INTCONST) {
         int v = expr_intconst_val(expr);
         char buf[64]; snprintf(buf, sizeof(buf), "#%d", v);
         return strdup(buf);
-    } else {
-        return strdup("#0");
     }
+    return NULL;
 }
 
-static void ast_to_tac_call_generic(void *call_node){
-    const char *callee = func_call_callee(call_node);
+/* Generate TAC (and return a place string) for arithmetic expr (incl. unary minus, binops). */
+static char *gen_expr_val(void *func_ast, void *expr) {
+    if (!expr) return strdup("#0");
+    NodeType t = ast_node_type(expr);
+
+    /* identifiers & int constants */
+    if (t == IDENTIFIER || t == INTCONST) {
+        char *p = expr_as_operand_prim(expr);
+        if (p) return p;
+    }
+
+    /* function call used as expression (optional support) */
+    if (t == FUNC_CALL) {
+        char *callee = func_call_callee(expr);
+        void *args = func_call_args(expr);
+
+        /* collect args L->R, emit PARAM in R->L */
+        int n = 0; void *p = args;
+        while (p){ n++; p = expr_list_rest(p); }
+        char **ops = (char**)malloc(sizeof(char*)*n);
+        p = args;
+        for(int i=0;i<n;i++){
+            void *e = expr_list_head(p);
+            ops[i] = gen_expr_val(func_ast, e);
+            p = expr_list_rest(p);
+        }
+        for (int i=n-1; i>=0; --i) { tac_emit(tac_param(ops[i])); free(ops[i]); }
+        free(ops);
+
+        tac_emit(tac_call(callee ? callee : "", n));
+        /* no return value convention; return #0 so caller can proceed */
+        return strdup("#0");
+    }
+
+    /* unary minus encoded as NodeType UMINUS */
+    if (t == UMINUS) {
+        void *E = expr_operand_1(expr);
+        char *a = gen_expr_val(func_ast, E);
+        char *dst = new_temp_name();
+        tac_emit(tac_binop(TAC_SUB, dst, "#0", a));
+        free(a);
+        return dst;
+    }
+
+    /* binary arithmetic ops */
+    if (t == ADD || t == SUB || t == MUL || t == DIV) {
+        void *L = expr_operand_1(expr);
+        void *R = expr_operand_2(expr);
+        char *a = gen_expr_val(func_ast, L);
+        char *b = gen_expr_val(func_ast, R);
+        char *dst = new_temp_name();
+        TacKind k = (t==ADD)?TAC_ADD : (t==SUB)?TAC_SUB : (t==MUL)?TAC_MUL : TAC_DIV;
+        tac_emit(tac_binop(k, dst, a, b));
+        free(a); free(b);
+        return dst;
+    }
+
+    /* relational/logical are handled by control flow, not as arithmetic values */
+    return strdup("#0");
+}
+
+/* Emit PARAMs + CALL for a call used as a statement (println or others) */
+static void ast_to_tac_call_stmt(void *func_ast, void *call_node){
+    char *callee = func_call_callee(call_node);
     void *args = func_call_args(call_node);
 
-    /* Collect args left-to-right, then emit PARAM in right-to-left order */
-    int n = 0;
-    void *p = args;
+    int n = 0; void *p = args;
     while (p){ n++; p = expr_list_rest(p); }
     char **ops = (char**)malloc(sizeof(char*)*n);
     p = args;
     for(int i=0;i<n;i++){
         void *e = expr_list_head(p);
-        ops[i] = expr_as_operand(e);
+        ops[i] = gen_expr_val(func_ast, e);
         p = expr_list_rest(p);
     }
-    for (int i=n-1; i>=0; --i) tac_emit(tac_param(ops[i]));
-    tac_emit(tac_call(callee ? callee : "", n));
-    for (int i=0;i<n;i++) free(ops[i]);
+    for (int i=n-1; i>=0; --i) { tac_emit(tac_param(ops[i])); free(ops[i]); }
     free(ops);
+
+    tac_emit(tac_call(callee ? callee : "", n));
 }
 
-static void ast_to_tac_stmt(void *stmt) {
+/* Generate TAC for a boolean test: emit one IFxx to Ltrue then GOTO Lfalse. */
+static void gen_bool_jump(void *func_ast, void *boolexpr, const char *Ltrue, const char *Lfalse) {
+    NodeType t = ast_node_type(boolexpr);
+    if (t==EQ||t==NE||t==LT||t==LE||t==GT||t==GE) {
+        char *a = gen_expr_val(func_ast, expr_operand_1(boolexpr));
+        char *b = gen_expr_val(func_ast, expr_operand_2(boolexpr));
+        TacKind cond =
+          (t==EQ)?TAC_IFEQ : (t==NE)?TAC_IFNE : (t==LT)?TAC_IFLT :
+          (t==LE)?TAC_IFLE : (t==GT)?TAC_IFGT : TAC_IFGE;
+        tac_emit(tac_if(cond, Ltrue, a, b));
+        tac_emit(tac_goto(Lfalse));
+        free(a); free(b);
+        return;
+    }
+
+    /* If it's not a relational, evaluate expression != 0 */
+    char *v = gen_expr_val(func_ast, boolexpr);
+    tac_emit(tac_if(TAC_IFNE, Ltrue, v, "#0"));
+    tac_emit(tac_goto(Lfalse));
+    free(v);
+}
+
+/* Convert statements */
+static void ast_to_tac_stmt(void *func_ast, void *stmt) {
     if (!stmt) return;
     NodeType k = ast_node_type(stmt);
 
     switch (k) {
         case ASSG: {
-            const char *lhs = stmt_assg_lhs(stmt);
-            void *rhs = stmt_assg_rhs(stmt);
-            char *src = expr_as_operand(rhs);
-            tac_emit(tac_copy(lhs, src));
-            free(src);
+            char *lhs = stmt_assg_lhs(stmt);
+            char *rhsv = gen_expr_val(func_ast, stmt_assg_rhs(stmt));
+            tac_emit(tac_copy(lhs, rhsv));
+            free(rhsv);
             break;
         }
         case FUNC_CALL: {
-            /* Handle any call uniformly (println or user functions) */
-            ast_to_tac_call_generic(stmt);
+            ast_to_tac_call_stmt(func_ast, stmt);
+            break;
+        }
+        case IF: {
+            void *cond = stmt_if_expr(stmt);
+            void *thenp = stmt_if_then(stmt);
+            void *elsep = stmt_if_else(stmt);
+
+            char *Lthen  = new_label_name();
+            char *Lelse  = new_label_name();
+            char *Lafter = new_label_name();
+
+            gen_bool_jump(func_ast, cond, Lthen, Lelse);
+            tac_emit(tac_label(Lthen));
+            ast_to_tac_stmt(func_ast, thenp);
+            tac_emit(tac_goto(Lafter));
+            tac_emit(tac_label(Lelse));
+            if (elsep) ast_to_tac_stmt(func_ast, elsep);
+            tac_emit(tac_label(Lafter));
+
+            free(Lthen); free(Lelse); free(Lafter);
+            break;
+        }
+        case WHILE: {
+            void *cond = stmt_while_expr(stmt);
+            void *body = stmt_while_body(stmt);
+
+            char *Ltop   = new_label_name();
+            char *Lbody  = new_label_name();
+            char *Lafter = new_label_name();
+
+            tac_emit(tac_label(Ltop));
+            gen_bool_jump(func_ast, cond, Lbody, Lafter);
+            tac_emit(tac_label(Lbody));
+            ast_to_tac_stmt(func_ast, body);
+            tac_emit(tac_goto(Ltop));
+            tac_emit(tac_label(Lafter));
+
+            free(Ltop); free(Lbody); free(Lafter);
+            break;
+        }
+        case RETURN: {
+            void *e = stmt_return_expr(stmt);
+            if (e) {
+                char *v = gen_expr_val(func_ast, e);
+                tac_emit(tac_return1(v));
+                free(v);
+            } else {
+                tac_emit(tac_return0());
+            }
             break;
         }
         case STMT_LIST: {
-            ast_to_tac_stmt_list(stmt);
+            ast_to_tac_stmt_list(func_ast, stmt);
             break;
         }
-        /* Milestone 1: ignore IF/WHILE/RETURN */
         default:
+            /* ignore unexpected kinds */
             break;
     }
 }
 
 static void ast_func_to_tac(void *func_ast) {
-    
-    const char *fname = func_def_name(func_ast);
+    char *fname = func_def_name(func_ast);
     void *body = func_def_body(func_ast);
     tac_emit(tac_enter(fname ? fname : "fn"));
-    if (body) ast_to_tac_stmt_list(body);
+    if (body) ast_to_tac_stmt_list(func_ast, body);
     tac_emit(tac_leave(fname ? fname : "fn"));
 }
 
 /* ------------------------
- *     TAC to MIPS lowering
+ *     MIPS helpers
  * ------------------------ */
 
 static void emit_runtime_println_once(void);
 static void emit_prologue(const char *fname, int frame_size);
 static void emit_epilogue(const char *fname);
+static void mips_load_into(const char *reg, void *func_ast, Locals *L, const char *opnd);
+static void mips_store_from(const char *reg, void *func_ast, Locals *L, const char *dst);
+static void mips_binop3(const char *mipsop, void *func_ast, Locals *L, const char *dst, const char *a, const char *b);
+static void mips_branch_rel(TacKind rel, void *func_ast, Locals *L, const char *Ldst, const char *a, const char *b);
 
-/* Emit MIPS for TAC list with a simple frame & locals map. */
+/* ------------------------
+ *     TAC to MIPS lowering
+ * ------------------------ */
+
 static void tac_to_mips(void *func_ast) {
-    const char *fname = func_def_name(func_ast);
+    char *fname = func_def_name(func_ast);
     if (!fname) fname = "fn";
 
     Locals L; locals_init(&L);
 
-    /* First pass: assign local slots (locals only; params/globals not placed here). */
+    /* First pass: assign local slots (locals + temps; params/globals not in locals) */
     for (Tac *t = tac_head; t; t = t->next) {
-        if (t->op == TAC_COPY) {
-            if (t->x && !is_imm(t->x) && classify_ident(func_ast, t->x)==CL_LOCAL)
-                (void)locals_offset_of(&L, t->x);
-            if (t->y && !is_imm(t->y) && classify_ident(func_ast, t->y)==CL_LOCAL)
-                (void)locals_offset_of(&L, t->y);
-        } else if (t->op == TAC_PARAM) {
-            if (t->x && !is_imm(t->x) && classify_ident(func_ast, t->x)==CL_LOCAL)
-                (void)locals_offset_of(&L, t->x);
+        switch (t->op) {
+            case TAC_COPY:
+                if (t->x && !is_imm(t->x) && classify_ident(func_ast, t->x)==CL_LOCAL)
+                    (void)locals_offset_of(&L, t->x);
+                if (t->y && !is_imm(t->y) && classify_ident(func_ast, t->y)==CL_LOCAL)
+                    (void)locals_offset_of(&L, t->y);
+                break;
+            case TAC_ADD: case TAC_SUB: case TAC_MUL: case TAC_DIV:
+                if (t->x && !is_imm(t->x) && classify_ident(func_ast, t->x)==CL_LOCAL)
+                    (void)locals_offset_of(&L, t->x);
+                if (t->y && !is_imm(t->y) && classify_ident(func_ast, t->y)==CL_LOCAL)
+                    (void)locals_offset_of(&L, t->y);
+                if (t->z && !is_imm(t->z) && classify_ident(func_ast, t->z)==CL_LOCAL)
+                    (void)locals_offset_of(&L, t->z);
+                break;
+            case TAC_PARAM:
+                if (t->x && !is_imm(t->x) && classify_ident(func_ast, t->x)==CL_LOCAL)
+                    (void)locals_offset_of(&L, t->x);
+                break;
+            case TAC_IFEQ: case TAC_IFNE: case TAC_IFLT: case TAC_IFLE:
+            case TAC_IFGT: case TAC_IFGE:
+                if (t->y && !is_imm(t->y) && classify_ident(func_ast, t->y)==CL_LOCAL)
+                    (void)locals_offset_of(&L, t->y);
+                if (t->z && !is_imm(t->z) && classify_ident(func_ast, t->z)==CL_LOCAL)
+                    (void)locals_offset_of(&L, t->z);
+                break;
+            case TAC_RETURN:
+                if (t->y && !is_imm(t->y) && classify_ident(func_ast, t->y)==CL_LOCAL)
+                    (void)locals_offset_of(&L, t->y);
+                break;
+            default: break;
         }
     }
 
@@ -299,66 +515,28 @@ static void tac_to_mips(void *func_ast) {
     int frame = locals_frame_size(&L);
     emit_prologue(fname, frame);
 
-
     /* Body */
     for (Tac *t = tac_head; t; t = t->next) {
         switch (t->op) {
             case TAC_COPY: {
-                /* x := y */
-                /* Load src into $t0 */
-                if (is_imm(t->y)) {
-                    int v = imm_val(t->y);
-                    printf("  li   $t0, %d\n", v);
-                } else {
-                    Class csrc = classify_ident(func_ast, t->y);
-                    if (csrc == CL_PARAM) {
-                        int idx = formal_index_of(func_ast, t->y);
-                        int off = param_offset_1based(idx);
-                        printf("  lw   $t0, %d($fp)\n", off);
-                    } else if (csrc == CL_GLOBAL) {
-                        ensure_global_emitted(t->y);
-                        printf("  lw   $t0, %s\n", t->y);
-                    } else { /* local */
-                        int off = locals_offset_of(&L, t->y);
-                        printf("  lw   $t0, %d($fp)\n", off);
-                    }
-                }
-                /* Store to dst */
-                if (!is_imm(t->x)) {
-                    Class cdst = classify_ident(func_ast, t->x);
-                    if (cdst == CL_PARAM) {
-                        int idx = formal_index_of(func_ast, t->x);
-                        int off = param_offset_1based(idx);
-                        printf("  sw   $t0, %d($fp)\n", off);
-                    } else if (cdst == CL_GLOBAL) {
-                        ensure_global_emitted(t->x);
-                        printf("  sw   $t0, %s\n", t->x);
-                    } else { /* local */
-                        int off = locals_offset_of(&L, t->x);
-                        printf("  sw   $t0, %d($fp)\n", off);
-                    }
-                }
+                mips_load_into("$t0", func_ast, &L, t->y);
+                mips_store_from("$t0", func_ast, &L, t->x);
                 break;
             }
+            case TAC_ADD: mips_binop3("add", func_ast, &L, t->x, t->y, t->z); break;
+            case TAC_SUB: mips_binop3("sub", func_ast, &L, t->x, t->y, t->z); break;
+            case TAC_MUL: mips_binop3("mul", func_ast, &L, t->x, t->y, t->z); break;
+            case TAC_DIV: {
+                mips_load_into("$t0", func_ast, &L, t->y);
+                mips_load_into("$t1", func_ast, &L, t->z);
+                printf("  div  $t0, $t1\n");
+                printf("  mflo $t2\n");
+                mips_store_from("$t2", func_ast, &L, t->x);
+                break;
+            }
+
             case TAC_PARAM: {
-                /* push actual in right-to-left order */
-                if (is_imm(t->x)) {
-                    int v = imm_val(t->x);
-                    printf("  li   $t0, %d\n", v);
-                } else {
-                    Class c = classify_ident(func_ast, t->x);
-                    if (c == CL_PARAM) {
-                        int idx = formal_index_of(func_ast, t->x);
-                        int off = param_offset_1based(idx);
-                        printf("  lw   $t0, %d($fp)\n", off);
-                    } else if (c == CL_GLOBAL) {
-                        ensure_global_emitted(t->x);
-                        printf("  lw   $t0, %s\n", t->x);
-                    } else { /* local */
-                        int off = locals_offset_of(&L, t->x);
-                        printf("  lw   $t0, %d($fp)\n", off);
-                    }
-                }
+                mips_load_into("$t0", func_ast, &L, t->x);
                 printf("  addiu $sp, $sp, -4\n");
                 printf("  sw   $t0, 0($sp)\n");
                 break;
@@ -372,6 +550,23 @@ static void tac_to_mips(void *func_ast) {
                 if (t->n > 0) printf("  addiu $sp, $sp, %d\n", 4 * t->n);
                 break;
             }
+
+            case TAC_LABEL: printf("%s:\n", t->x ? t->x : "L"); break;
+            case TAC_GOTO:  printf("  j    %s\n", t->x ? t->x : "L"); break;
+
+            case TAC_IFEQ: case TAC_IFNE: case TAC_IFLT:
+            case TAC_IFLE: case TAC_IFGT: case TAC_IFGE:
+                mips_branch_rel(t->op, func_ast, &L, t->x, t->y, t->z);
+                break;
+
+            case TAC_RETURN: {
+                if (t->y) {
+                    mips_load_into("$v0", func_ast, &L, t->y); /* return value in $v0 */
+                }
+                printf("  j    Lret_%s\n", fname);
+                break;
+            }
+
             case TAC_ENTER:
             case TAC_LEAVE:
                 /* handled by prologue/epilogue emitters */
@@ -393,21 +588,20 @@ void codegen_init_once(void) {
     static int done = 0;
     if (done) return;
     done = 1;
-
-    /* We don't know globals upfront, we emit them when first used.
-       But we must still emit the println runtime. */
     emit_runtime_println_once();
 }
-
 
 void codegen_func(void *func_ast) {
     if (!func_ast || ast_node_type(func_ast) != FUNC_DEF) return;
 
-    /* AST to TAC (Milestone 1 subset) */
+    /* reset temps per function */
+    temp_no = 0;
+
+    /* AST -> TAC */
     tac_reset();
     ast_func_to_tac(func_ast);
 
-    /* TAC to MIPS with symtab-based storage classification */
+    /* TAC -> MIPS */
     tac_to_mips(func_ast);
 
     /* free TAC list */
@@ -416,11 +610,11 @@ void codegen_func(void *func_ast) {
         Tac *n = t->next;
         free(t->x);
         free(t->y);
+        free(t->z);
         free(t);
         t = n;
     }
     tac_head = tac_tail = NULL;
-
 }
 
 /* ------------------------
@@ -454,7 +648,6 @@ static void emit_prologue(const char *fname, int frame_size) {
     if (frame_size > 0) {
         printf("  addiu $sp, $sp, -%d\n", frame_size);
     }
-
 }
 
 static void emit_epilogue(const char *fname) {
@@ -464,4 +657,64 @@ static void emit_epilogue(const char *fname) {
     printf("  lw   $ra, 4($sp)\n");
     printf("  addiu $sp, $sp, 8\n");
     printf("  jr   $ra\n\n");
+}
+
+/* ------------------------
+ *        MIPS helpers
+ * ------------------------ */
+
+static void mips_load_into(const char *reg, void *func_ast, Locals *L, const char *opnd) {
+    if (is_imm(opnd)) {
+        printf("  li   %s, %d\n", reg, imm_val(opnd));
+        return;
+    }
+    Class c = classify_ident(func_ast, opnd);
+    if (c == CL_PARAM) {
+        int idx = formal_index_of(func_ast, opnd);
+        int off = param_offset_1based(idx);
+        printf("  lw   %s, %d($fp)\n", reg, off);
+    } else if (c == CL_GLOBAL) {
+        ensure_global_emitted(opnd);
+        printf("  lw   %s, %s\n", reg, opnd);
+    } else { /* local or temp */
+        int off = locals_offset_of(L, opnd);
+        printf("  lw   %s, %d($fp)\n", reg, off);
+    }
+}
+
+static void mips_store_from(const char *reg, void *func_ast, Locals *L, const char *dst) {
+    if (is_imm(dst)) return; /* shouldn't happen for dests, but guard anyway */
+    Class c = classify_ident(func_ast, dst);
+    if (c == CL_PARAM) {
+        int idx = formal_index_of(func_ast, dst);
+        int off = param_offset_1based(idx);
+        printf("  sw   %s, %d($fp)\n", reg, off);
+    } else if (c == CL_GLOBAL) {
+        ensure_global_emitted(dst);
+        printf("  sw   %s, %s\n", reg, dst);
+    } else { /* local or temp */
+        int off = locals_offset_of(L, dst);
+        printf("  sw   %s, %d($fp)\n", reg, off);
+    }
+}
+
+static void mips_binop3(const char *mipsop, void *func_ast, Locals *L, const char *dst, const char *a, const char *b) {
+    mips_load_into("$t0", func_ast, L, a);
+    mips_load_into("$t1", func_ast, L, b);
+    printf("  %s  $t2, $t0, $t1\n", mipsop);
+    mips_store_from("$t2", func_ast, L, dst);
+}
+
+static void mips_branch_rel(TacKind rel, void *func_ast, Locals *L, const char *Ldst, const char *a, const char *b) {
+    mips_load_into("$t0", func_ast, L, a);
+    mips_load_into("$t1", func_ast, L, b);
+    switch (rel) {
+        case TAC_IFEQ: printf("  beq  $t0, $t1, %s\n", Ldst); break;
+        case TAC_IFNE: printf("  bne  $t0, $t1, %s\n", Ldst); break;
+        case TAC_IFLT: printf("  blt  $t0, $t1, %s\n", Ldst); break;
+        case TAC_IFLE: printf("  ble  $t0, $t1, %s\n", Ldst); break;
+        case TAC_IFGT: printf("  bgt  $t0, $t1, %s\n", Ldst); break;
+        case TAC_IFGE: printf("  bge  $t0, $t1, %s\n", Ldst); break;
+        default: break;
+    }
 }

@@ -4,8 +4,8 @@
 #include <ctype.h>
 #include "parser.h"
 #include "symtab.h"
-#include "ast.h"          
-#include "codegen.h"    
+#include "ast.h"
+#include "codegen.h"
 
 /* prototypes for AST helpers (implemented in ast.c) */
 extern void *make_func_def(char *name, int nargs, char **args, void *body);
@@ -56,8 +56,8 @@ void increment_tokens();
 /* ----------- */
 
 extern int chk_decl_flag;
-extern int print_ast_flag; 
-extern int gen_code_flag; 
+extern int print_ast_flag;
+extern int gen_code_flag;
 
 int curTok;
 int nextTok;
@@ -67,7 +67,7 @@ int curLine;
 int nextTokLine;
 int thirdTokLine;
 
-int lastTypeDeclared;  // used for id_list variable declaration of multiple variables.
+int lastTypeDeclared;
 
 char* curLexeme;
 char* nextLexeme;
@@ -110,7 +110,6 @@ char* token_name[] = {
 
 /* ------------------ parser implementation ------------------ */
 
-/* prog: processes top-level declarations (functions or globals) */
 void prog() {
     if (curTok == kwINT) {
         if(nextTok == ID){
@@ -132,14 +131,12 @@ void prog() {
     }
 }
 
-/* var_decl: no AST produced for global var decls */
 void var_decl(){
     type();
     id_list();
     match(SEMI);
 }
 
-/* id_list: adds variable(s) to current scope */
 void id_list(){
     if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){
         fprintf(stderr, "ERROR LINE %d: INT variable %s was ALREADY defined in the current scope\n", curLine, curLexeme);
@@ -158,7 +155,6 @@ void type(){
     match(kwINT);
 }
 
-/* func_defn: build AST for the function */
 void *func_defn(){
     type();
     if( chk_decl_flag == 1 && lookup_global_scope(curLexeme, SYM_FUNC) == 0){
@@ -204,9 +200,9 @@ void *func_defn(){
         print_ast(func_ast);
     }
 
-     if (gen_code_flag) {
-        codegen_init_once();      /* prints the println runtime once */
-        codegen_func(func_ast);   /* AST -> TAC -> MIPS for this function */
+    if (gen_code_flag) {
+        codegen_init_once();
+        codegen_func(func_ast);
     }
 
     pop_current_scope();
@@ -216,7 +212,6 @@ void *func_defn(){
     return func_ast;
 }
 
-/* opt_formals: returns EXPR_LIST of IDENTIFIER nodes or NULL */
 void *opt_formals(){
     if(curTok == kwINT){
         return formals();
@@ -224,7 +219,6 @@ void *opt_formals(){
     return NULL;
 }
 
-/* formals: parse one or more formals and return EXPR_LIST */
 void *formals(){
     type();
     if( chk_decl_flag == 1 && lookup_in_current_scope(curLexeme, SYM_INT_VAR) == 0){
@@ -248,7 +242,6 @@ void *formals(){
     }
 }
 
-/* opt_var_decls: parse local variable declarations (no AST) */
 void opt_var_decls(){
     if(curTok == kwINT){
         var_decl();
@@ -256,12 +249,10 @@ void opt_var_decls(){
     }
 }
 
-/* opt_stmt_list: returns STMT_LIST (possibly NULL) */
 void *opt_stmt_list() {
     if (might_be_statement() == 0) {
         void *s = stmt();
         void *rest = opt_stmt_list();
-        /* Preserve explicit empty statements as list nodes */
         if (s == NULL) {
             return make_stmt_list(NULL, rest);
         }
@@ -276,7 +267,6 @@ int might_be_statement(){
     return 1;
 }
 
-/* stmt: returns AST for the statement; NULL for empty ';' */
 void *stmt(){
     if(curTok == ID){
         if(nextTok == opASSG){
@@ -297,13 +287,11 @@ void *stmt(){
         return return_stmt();
     }
     else if (curTok == LBRACE) {
-    match(LBRACE);
-    void *body = opt_stmt_list();
-    match(RBRACE);
-    // If the block is empty, don't fabricate a stmt_list node.
-    // Let the parent (e.g., while/if/function body) decide how to print braces.
-    return body;  // return NULL if empty, otherwise the inner list
-}
+        match(LBRACE);
+        void *body = opt_stmt_list();
+        match(RBRACE);
+        return body;
+    }
     else if(curTok == SEMI){
         match(SEMI);
         return NULL;
@@ -316,7 +304,6 @@ void *stmt(){
     return NULL;
 }
 
-/* if_stmt: returns IF AST node */
 void *if_stmt(){
     match(kwIF);
     match(LPAREN);
@@ -331,7 +318,6 @@ void *if_stmt(){
     return make_if(cond, thenp, elsep);
 }
 
-/* while_stmt: returns WHILE AST node */
 void *while_stmt(){
     match(kwWHILE);
     match(LPAREN);
@@ -341,7 +327,6 @@ void *while_stmt(){
     return make_while(cond, body);
 }
 
-/* return_stmt: returns RETURN AST node */
 void *return_stmt(){
     match(kwRETURN);
     if(curTok == SEMI){
@@ -354,7 +339,6 @@ void *return_stmt(){
     }
 }
 
-/* assg_stmt: returns ASSG AST node */
 void *assg_stmt(){
     char *lhs = strdup(curLexeme);
     match(ID);
@@ -364,16 +348,15 @@ void *assg_stmt(){
     return make_assg(lhs, rhs);
 }
 
-/* fn_call: returns FUNC_CALL AST node, performs semantic checks */
 void *fn_call(){
     optExpListCount = 0;
     int retVal = lookup_local_to_global(curLexeme, SYM_FUNC);
     if(chk_decl_flag == 1){
-        if(retVal == -1){ /* function never declared */
+        if(retVal == -1){
             fprintf(stderr, "ERROR LINE %d: Function %s was never defined\n", curLine, curLexeme);
             exit(1);
         }
-        else if(retVal == -2){ /* found a definition of same ID but not a function */
+        else if(retVal == -2){
             fprintf(stderr, "ERROR LINE %d: Function %s was defined as another type or something.\n", curLine, curLexeme);
             exit(1);
         }
@@ -382,7 +365,7 @@ void *fn_call(){
     char *callee = strdup(curLexeme);
     match(ID);
     match(LPAREN);
-    void *args = opt_expr_list(); /* EXPR_LIST or NULL */
+    void *args = opt_expr_list();
 
     if(chk_decl_flag == 1){
         if(optExpListCount != retVal){
@@ -396,15 +379,13 @@ void *fn_call(){
     return make_func_call(callee, args);
 }
 
-/* opt_expr_list: returns EXPR_LIST or NULL */
 void *opt_expr_list(){
-    if(curTok == ID || curTok == INTCON){
+    if(curTok == ID || curTok == INTCON || curTok==LPAREN || curTok==opSUB){
         return expr_list();
     }
     return NULL;
 }
 
-/* expr_list: builds EXPR_LIST AST and increments optExpListCount */
 void *expr_list(){
     optExpListCount++;
     void *head = arith_exp();
@@ -417,7 +398,6 @@ void *expr_list(){
     }
 }
 
-/* bool_exp: a relational expression -> returns Expr AST (EQ/NE/GT/...) */
 void *bool_exp(){
     void *lhs = arith_exp();
     NodeType op = relop();
@@ -425,10 +405,54 @@ void *bool_exp(){
     return make_expr(op, lhs, rhs);
 }
 
-/* arith_exp: returns IDENTIFIER or INTCONST AST node (G2 arithmetic is simple) */
+
+static void *parse_factor(); /* forward */
+static void *parse_term();   /* handles * and / */
+static void *parse_sum();    /* handles + and - */
+
 void *arith_exp() {
-    if(curTok == ID) {
-        /* semantic checking: ensure ID is a variable, not a function */
+    return parse_sum();
+}
+
+static void *parse_sum() {
+    void *lhs = parse_term();
+    while (curTok == opADD || curTok == opSUB) {
+        NodeType op = (curTok == opADD) ? ADD : SUB;
+        match(curTok);
+        void *rhs = parse_term();
+        lhs = make_expr(op, lhs, rhs);
+    }
+    return lhs;
+}
+
+static void *parse_term() {
+    void *lhs = parse_factor();
+    while (curTok == opMUL || curTok == opDIV) {
+        NodeType op = (curTok == opMUL) ? MUL : DIV;
+        match(curTok);
+        void *rhs = parse_factor();
+        lhs = make_expr(op, lhs, rhs);
+    }
+    return lhs;
+}
+
+static void *parse_factor() {
+    if (curTok == opSUB) { /* unary minus */
+        match(opSUB);
+        void *e = parse_factor();
+        return make_expr(UMINUS, e, NULL);
+    }
+    if (curTok == LPAREN) {
+        match(LPAREN);
+        void *e = arith_exp();
+        match(RPAREN);
+        return e; /* treat as parens node in codegen by passing child through */
+    }
+    if (curTok == ID) {
+        if (nextTok == LPAREN) {
+            return fn_call(); /* note: no SEMI here; stmt() adds it when used as a statement */
+        }
+        /* variable */
         if (chk_decl_flag == 1) {
             int retVal = lookup_local_to_global(curLexeme, SYM_INT_VAR);
             if (retVal == -1) {
@@ -444,51 +468,26 @@ void *arith_exp() {
         match(ID);
         return make_identifier(name);
     }
-    else if (curTok == INTCON) {
+    if (curTok == INTCON) {
         int val = atoi(curLexeme);
         match(INTCON);
         return make_intconst(val);
     }
-    else {
-        /* token not expected for arith_exp according to grammar */
-        printStandardError(ID, curTok);
-        exit(1);
-    }
+    printStandardError(ID, curTok);
+    exit(1);
 }
 
-/* relop: returns NodeType corresponding to relational operator */
 NodeType relop(){
-    if(curTok == opEQ){
-        match(opEQ);
-        return EQ;
-    }
-    else if(curTok == opNE){
-        match(opNE);
-        return NE;
-    }
-    else if(curTok == opLE){
-        match(opLE);
-        return LE;
-    }
-    else if(curTok == opLT){
-        match(opLT);
-        return LT;
-    }
-    else if(curTok == opGE){
-        match(opGE);
-        return GE;
-    }
-    else if(curTok == opGT){
-        match(opGT);
-        return GT;
-    }
-    else{
-        printStandardError(opEQ, curTok);
-        exit(1);
-    }
+    if(curTok == opEQ){ match(opEQ); return EQ; }
+    else if(curTok == opNE){ match(opNE); return NE; }
+    else if(curTok == opLE){ match(opLE); return LE; }
+    else if(curTok == opLT){ match(opLT); return LT; }
+    else if(curTok == opGE){ match(opGE); return GE; }
+    else if(curTok == opGT){ match(opGT); return GT; }
+    printStandardError(opEQ, curTok);
+    exit(1);
 }
 
-/* match, error helpers, and token initialization */
 void match(int tok){
     if (curTok == tok) {
         curTok = nextTok;
@@ -520,7 +519,7 @@ void increment_tokens(){
     nextTok = get_token();
     nextTokLine = getLineNumber();
     nextLexeme = get_lexeme();
-    
+
     thirdTok = get_token();
     thirdTokLine = getLineNumber();
     thirdLexeme = get_lexeme();
@@ -529,16 +528,12 @@ void increment_tokens(){
 static void predeclare_builtins(void) {
     // Pretend we saw: int println(int);
     Symbol *f = add_new_symbol("println", SYM_FUNC);
-    if (f) {
-        // one int parameter (name doesn't matter)
-        append_child_to_symbol(f, "_x", SYM_INT_VAR);
-    }
+    if (f) { append_child_to_symbol(f, "_x", SYM_INT_VAR); }
 }
 
-/* Main parse function */
 int parse(void) {
     lastSymbolAdded = NULL;
-    add_new_scope(); /* Append Global scope to symbol table */
+    add_new_scope(); /* Global scope */
     predeclare_builtins();
     increment_tokens();
     prog();
